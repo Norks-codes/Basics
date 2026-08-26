@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FPL Edge — Gameweek Assistant</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --ink:#12203a; --muted:#5a6b86;
+    --line:#e2e8f0; --brand:#37003c; --brand2:#00ff87; --accent:#0b7285;
+    --good:#0a8754; --warn:#b7791f; --bad:#c0392b; --chip:#eef2f7;
+    --shadow:0 1px 3px rgba(16,32,64,.08),0 6px 20px rgba(16,32,64,.06);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1420; --panel:#161d2b; --ink:#e8edf5; --muted:#9fb0c8;
+      --line:#26303f; --brand:#d09fe0; --brand2:#00ff87; --accent:#4dd0e1;
+      --good:#3ddc97; --warn:#f0b859; --bad:#ff6b6b; --chip:#1e2635;
+      --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent)}
+  header{background:linear-gradient(100deg,var(--brand),#5c0a63);color:#fff;padding:18px 20px}
+  header .wrap{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{margin:0;font-size:20px;letter-spacing:.2px}
+  header h1 span{color:var(--brand2)}
+  header .tag{font-size:12.5px;opacity:.9}
+  main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
+  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0 8px}
+  nav.tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    padding:9px 14px;border-radius:999px;cursor:pointer;font-weight:600;font-size:13.5px}
+  nav.tabs button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
+  .panel h2{margin:0 0 4px;font-size:17px}
+  .panel h3{margin:18px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 12px}
+  label{display:block;font-weight:600;font-size:13px;margin:10px 0 4px}
+  input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+    background:var(--bg);color:var(--ink);font-size:14px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:150px}
+  button.btn{background:var(--brand);color:#fff;border:0;padding:11px 16px;border-radius:10px;
+    font-weight:700;cursor:pointer;font-size:14px}
+  button.btn.alt{background:var(--accent)}
+  button.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  button.btn:disabled{opacity:.5;cursor:not-allowed}
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px;cursor:pointer}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .fdr1,.fdr2{background:rgba(10,135,84,.15);color:var(--good)}
+  .fdr3{background:rgba(120,120,120,.18);color:var(--muted)}
+  .fdr4,.fdr5{background:rgba(192,57,43,.15);color:var(--bad)}
+  .flagok{color:var(--good)} .flagwarn{color:var(--warn)} .flagbad{color:var(--bad);font-weight:700}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:6px}
+  .card{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card .big{font-size:26px;font-weight:800;line-height:1.1}
+  .card .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .rec{border-left:4px solid var(--brand);background:var(--bg);border-radius:0 10px 10px 0;
+    padding:12px 14px;margin:10px 0}
+  .rec.buy{border-color:var(--good)} .rec.sell{border-color:var(--bad)} .rec.cap{border-color:var(--brand2)}
+  .rec b{font-size:14.5px}
+  .muted{color:var(--muted)}
+  .status{padding:10px 12px;border-radius:10px;font-size:13.5px;margin:10px 0;display:none}
+  .status.show{display:block}
+  .status.err{background:rgba(192,57,43,.12);color:var(--bad)}
+  .status.ok{background:rgba(10,135,84,.12);color:var(--good)}
+  .status.info{background:rgba(11,114,133,.12);color:var(--accent)}
+  .squad-pos{margin:14px 0}
+  .squad-pos h4{margin:0 0 6px;font-size:13px;color:var(--muted)}
+  .plist{display:flex;flex-direction:column;gap:6px}
+  .prow{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);
+    border-radius:10px;padding:8px 10px;font-size:13.5px}
+  .prow .nm{font-weight:700;flex:1;min-width:90px}
+  .prow .rm{margin-left:auto;background:transparent;border:0;color:var(--bad);cursor:pointer;font-weight:800;font-size:16px}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+  details{margin:8px 0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  summary{cursor:pointer;font-weight:700}
+  ul.strat{padding-left:18px} ul.strat li{margin:8px 0}
+  .tt{border-bottom:1px dotted var(--muted);cursor:help}
+  footer{max-width:1100px;margin:0 auto;padding:0 16px 40px;color:var(--muted);font-size:12.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>FPL <span>Edge</span></h1>
+    <div class="tag">Your gameweek-to-gameweek assistant · live data · saves your season</div>
+  </div>
+</header>
+
+<main>
+  <div id="globalStatus" class="status"></div>
+
+  <nav class="tabs">
+    <button data-tab="team" class="active">1 · My Team</button>
+    <button data-tab="gw">2 · This Gameweek</button>
+    <button data-tab="explorer">3 · Find Players</button>
+    <button data-tab="log">4 · Season Log</button>
+    <button data-tab="win">5 · How to Win</button>
+  </nav>
+
+  <!-- ============ TAB 1: MY TEAM ============ -->
+  <section id="tab-team">
+    <div class="panel">
+      <h2>Load your team</h2>
+      <p class="sub">The fastest way: enter your <b>FPL Team ID</b> and we pull your real squad, budget and bank automatically.</p>
+      <div class="row">
+        <div>
+          <label>FPL Team ID</label>
+          <input id="teamId" inputmode="numeric" placeholder="e.g. 1234567">
+          <div class="hint">Find it: log in at the official FPL site → <b>Points</b> tab → the number in the web address <code>/entry/<b>THIS-NUMBER</b>/</code></div>
+        </div>
+        <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+          <button class="btn" id="loadTeamBtn">Load my team</button>
+        </div>
+      </div>
+      <div id="teamStatus" class="status"></div>
+      <details>
+        <summary>Or build a squad by hand</summary>
+        <label>Search a player to add</label>
+        <input id="manualSearch" placeholder="Type a name, e.g. Salah">
+        <div id="manualResults" class="plist" style="margin-top:8px"></div>
+        <div class="hint">Added players appear in your squad below. Set your bank in the Season Log tab.</div>
+      </details>
+    </div>
+
+    <div class="panel" id="assessPanel" style="display:none">
+      <h2>Team assessment <span class="muted" id="assessTeamName"></span></h2>
+      <p class="sub">A read on your squad's strengths and weaknesses right now.</p>
+      <div class="cards" id="assessCards"></div>
+      <div id="assessNotes"></div>
+      <h3>Your squad</h3>
+      <div id="squadView"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB 2: THIS GAMEWEEK ============ -->
+  <section id="tab-gw" style="display:none">
+    <div class="panel">
+      <h2>Recommendations for <span id="gwTitle">the next gameweek</span></h2>
+      <p class="sub">Everything below is scored from live <b>form × fixture difficulty × chance of playing</b>. Load your team first (Tab 1).</p>
+      <div id="gwEmpty" class="status info show">Load your team in Tab 1 to get captain, transfer and chip advice.</div>
+      <div id="gwContent" style="display:none">
+        <h3>Captain</h3>
+        <div id="captainRec"></div>
+        <h3>Transfer ideas</h3>
+        <p class="sub">We compare your weakest starters against the best players you can afford. A transfer is only worth a <b>−4 hit</b> if the projected gain over the next 5 GWs clears ~5 pts.</p>
+        <div id="transferRec"></div>
+        <h3>Chip watch</h3>
+        <div id="chipRec"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB 3: FIND PLAYERS ============ -->
+  <section id="tab-explorer" style="display:none">
+    <div class="panel">
+      <h2>Find players to buy</h2>
+      <p class="sub">Ranked by our projected points over the next 5 gameweeks. Use the filters to hunt for value or differentials.</p>
+      <div class="row">
+        <div><label>Position</label>
+          <select id="fPos"><option value="0">All</option><option value="1">Goalkeepers</option>
+          <option value="2">Defenders</option><option value="3">Midfielders</option><option value="4">Forwards</option></select></div>
+        <div><label>Max price (£m)</label><input id="fPrice" type="number" step="0.1" placeholder="e.g. 8.0"></div>
+        <div><label>Max ownership %</label><input id="fOwn" type="number" step="1" placeholder="e.g. 10 for differentials"></div>
+        <div><label>Sort by</label><select id="fSort">
+          <option value="proj5">Projected (next 5 GW)</option>
+          <option value="value">Value (points per £m)</option>
+          <option value="form">Form</option>
+          <option value="projnext">Projected (next GW)</option>
+        </select></div>
+      </div>
+      <div class="btnrow"><button class="btn alt" id="applyFilters">Show players</button></div>
+      <div class="scroll" style="margin-top:14px"><table id="exTable"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB 4: SEASON LOG ============ -->
+  <section id="tab-log" style="display:none">
+    <div class="panel">
+      <h2>Season log <span class="muted">— this is your memory between gameweeks</span></h2>
+      <p class="sub">Everything is saved in <b>this browser</b> automatically. Record each gameweek to track your climb up the mini-league.</p>
+      <div class="grid2">
+        <div><label>Your bank (£m)</label><input id="bankInput" type="number" step="0.1" placeholder="e.g. 0.5"></div>
+        <div><label>Free transfers available</label><input id="ftInput" type="number" step="1" placeholder="e.g. 1"></div>
+      </div>
+      <h3>Chips used</h3>
+      <div id="chipTracker" class="cards"></div>
+
+      <h3>Log a gameweek result</h3>
+      <div class="row">
+        <div><label>Gameweek</label><input id="logGw" type="number" placeholder="e.g. 2"></div>
+        <div><label>Points</label><input id="logPts" type="number" placeholder="e.g. 62"></div>
+        <div><label>Overall rank</label><input id="logRank" type="text" placeholder="e.g. 2,340,112"></div>
+        <div><label>Mini-league position</label><input id="logMl" type="text" placeholder="e.g. 8 of 12"></div>
+      </div>
+      <label>Notes (captain, transfers, what worked)</label>
+      <input id="logNote" placeholder="e.g. Captained Haaland, sold Mbeumo for Saka">
+      <div class="btnrow">
+        <button class="btn" id="saveLogBtn">Save gameweek</button>
+        <button class="btn ghost" id="saveSettingsBtn">Save bank / transfers</button>
+      </div>
+      <div id="logStatus" class="status"></div>
+      <h3>History</h3>
+      <div class="scroll"><table id="logTable"><thead><tr>
+        <th>GW</th><th>Points</th><th>Overall rank</th><th>Mini-league</th><th>Notes</th><th></th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="panel">
+      <h3>Danger zone</h3>
+      <p class="sub">Clears everything saved in this browser (squad, log, settings).</p>
+      <button class="btn ghost" id="wipeBtn">Erase all saved data</button>
+    </div>
+  </section>
+
+  <!-- ============ TAB 5: HOW TO WIN ============ -->
+  <section id="tab-win" style="display:none">
+    <div class="panel">
+      <h2>How to win your mini-league</h2>
+      <p class="sub">The principles the tool is built around — distilled from FPL analysts and past champions.</p>
+      <ul class="strat">
+        <li><b>Play your rivals, not the world.</b> To win a mini-league you only need to beat the people in it. Watch what your rivals captain and own; if they all have a big differential, you may need it too, or a bold counter-move.</li>
+        <li><b>Captaincy is the biggest lever.</b> Your captain scores double and swings more points than any single transfer. The 2025/26 champion captained the standout premium (Haaland) in 22 of 38 gameweeks. Consistency beats cleverness — pick the highest-ceiling nailed player with a good fixture.</li>
+        <li><b>Take hits rarely.</b> A −4 point hit needs to earn ~5–6 points back to be worth it. Three −4s across a run is a 12-point anchor. Bank a free transfer and move with purpose instead of tinkering.</li>
+        <li><b>Buy form + fixtures, not names.</b> Target players entering an easy run of fixtures who are also in form and nailed to start. That's exactly what the "Projected (5 GW)" score in this tool measures.</li>
+        <li><b>Chips win seasons — time them.</b> Don't pre-book chips. Use <b>Wildcard</b> on a big fixture swing or when 4+ players need replacing; <b>Triple Captain</b> on a premium in a double gameweek; <b>Bench Boost</b> when all 15 have good fixtures (usually a double gameweek); <b>Free Hit</b> to navigate a blank gameweek or attack a big double.</li>
+        <li><b>Own the essential engine, differ at the edges.</b> Not owning a rampant, highly-owned captain option is a risk. Take your differentials in the cheaper, rotation-friendly spots — not by leaving out the obvious captain.</li>
+        <li><b>Minutes are everything.</b> A brilliant player on the bench scores nothing. This tool discounts anyone flagged injured, suspended or doubtful.</li>
+      </ul>
+      <p class="hint">Sources: Premier League FPL champion guide, Fantasy Football Scout, Fantasy Football Fix. See the README in the repository for links.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Data: official Fantasy Premier League feed, read through a public CORS proxy (the site blocks direct browser access).
+  This is an unofficial personal tool and is not affiliated with the Premier League. Projections are estimates, not guarantees.
+</footer>
+
+<script>
+"use strict";
+// ============================================================
+//  FPL Edge — single-file gameweek assistant
+//  Data source: https://fantasy.premierleague.com/api/  (read via CORS proxy)
+// ============================================================
+
+const API = "https://fantasy.premierleague.com/api";
+// The FPL API blocks direct browser calls (no CORS header). We route through
+// public proxies and try them in order until one succeeds.
+const PROXIES = [
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://thingproxy.freeboard.io/fetch/" + u,
+];
+
+const STORE_KEY = "fplEdge.v1";
+let DB = load();                 // persisted state
+let BOOT = null;                 // bootstrap-static
+let FIXTURES = null;             // fixtures
+let byId = {};                   // player id -> element
+let teamsById = {};              // team id -> team
+let fixturesByTeam = {};         // team id -> [{event,diff,home,opp}]
+let TARGET_GW = null;            // next upcoming gameweek id
+const FDR = {1:1.25, 2:1.10, 3:1.0, 4:0.85, 5:0.70};
+
+// ---------- storage ----------
+function load(){
+  try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){}
+}
+function ensure(){
+  DB.squad = DB.squad || [];        // array of element ids
+  DB.bank = DB.bank ?? 0;
+  DB.ft = DB.ft ?? 1;
+  DB.chips = DB.chips || {};        // {wildcard:{used:true,gw:5}, ...}
+  DB.log = DB.log || [];            // [{gw,pts,rank,ml,note}]
+  DB.teamId = DB.teamId || "";
+  DB.teamName = DB.teamName || "";
+}
+ensure();
+
+// ---------- fetch with proxy fallback ----------
+async function fetchJSON(path){
+  const url = API + path;
+  let lastErr;
+  for(const wrap of PROXIES){
+    try{
+      const res = await fetch(wrap(url), {headers:{"Accept":"application/json"}});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const text = await res.text();
+      return JSON.parse(text);
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("All proxies failed");
+}
+
+// ---------- boot data ----------
+async function loadCore(){
+  globalMsg("Loading live FPL data…","info");
+  BOOT = await fetchJSON("/bootstrap-static/");
+  FIXTURES = await fetchJSON("/fixtures/");
+  byId = {}; teamsById = {}; fixturesByTeam = {};
+  BOOT.elements.forEach(p => byId[p.id] = p);
+  BOOT.teams.forEach(t => { teamsById[t.id] = t; fixturesByTeam[t.id] = []; });
+  // target gameweek = next upcoming, else current
+  const nextEv = BOOT.events.find(e => e.is_next);
+  const curEv  = BOOT.events.find(e => e.is_current);
+  TARGET_GW = (nextEv && nextEv.id) || (curEv && curEv.id) ||
+              (BOOT.events.find(e=>!e.finished)||{}).id || 1;
+  FIXTURES.filter(f => !f.finished && f.event != null).forEach(f => {
+    fixturesByTeam[f.team_h].push({event:f.event, diff:f.team_h_difficulty, home:true,  opp:f.team_a});
+    fixturesByTeam[f.team_a].push({event:f.event, diff:f.team_a_difficulty, home:false, opp:f.team_h});
+  });
+  Object.values(fixturesByTeam).forEach(a => a.sort((x,y)=>x.event-y.event));
+  globalMsg("Live data loaded ✓  Next gameweek: GW"+TARGET_GW, "ok", 4000);
+  document.getElementById("gwTitle").textContent = "GW" + TARGET_GW;
+}
+
+// ---------- player maths ----------
+function availability(p){
+  if(["i","s","u"].includes(p.status)) return 0;          // injured/suspended/unavailable
+  if(p.chance_of_playing_next_round != null) return p.chance_of_playing_next_round/100;
+  if(p.status === "d") return 0.5;                          // doubtful, no % given
+  return 1;
+}
+function baseForm(p){
+  const f = parseFloat(p.form)||0, ppg = parseFloat(p.points_per_game)||0;
+  return f > 0 ? (0.65*f + 0.35*ppg) : ppg;                // blend form with season rate
+}
+function nextFixtures(teamId, n){ return (fixturesByTeam[teamId]||[]).slice(0, n); }
+// projected points for the single next gameweek (handles double GWs)
+function projNext(p){
+  const avail = availability(p);
+  if(avail === 0) return 0;
+  const gwFix = (fixturesByTeam[p.team]||[]).filter(f => f.event === TARGET_GW);
+  if(gwFix.length === 0) return 0;                          // blank gameweek for this player
+  const base = baseForm(p);
+  return gwFix.reduce((s,f)=> s + base * (FDR[f.diff]||1), 0) * avail;
+}
+// projected points across the next 5 scheduled fixtures
+function proj5(p){
+  const avail = availability(p);
+  if(avail === 0) return 0;
+  const base = baseForm(p);
+  return nextFixtures(p.team,5).reduce((s,f)=> s + base*(FDR[f.diff]||1), 0) * avail;
+}
+function price(p){ return p.now_cost/10; }
+function value5(p){ const c=price(p); return c>0 ? proj5(p)/c : 0; }
+function posName(t){ return {1:"GK",2:"DEF",3:"MID",4:"FWD"}[t]; }
+function statusFlag(p){
+  const a = availability(p);
+  if(a===0) return `<span class="flagbad" title="${p.news||'Unavailable'}">OUT</span>`;
+  if(a<1)   return `<span class="flagwarn" title="${p.news||'Doubtful'}">${Math.round(a*100)}%</span>`;
+  return `<span class="flagok">✓</span>`;
+}
+function fdrPill(diff){ return `<span class="pill fdr${diff}">${diff}</span>`; }
+function fixtureStrip(teamId, n){
+  return nextFixtures(teamId,n).map(f=>{
+    const opp = teamsById[f.opp] ? teamsById[f.opp].short_name : "?";
+    return fdrPill(f.diff) + `<span class="muted" style="font-size:11px"> ${opp}${f.home?"(H)":"(A)"}</span>`;
+  }).join(" ") || `<span class="muted">no fixtures</span>`;
+}
+
+// ============================================================
+//  TEAM LOADING
+// ============================================================
+async function loadTeamById(){
+  const id = (document.getElementById("teamId").value||"").replace(/\D/g,"");
+  if(!id){ teamMsg("Enter your numeric Team ID first.","err"); return; }
+  try{
+    if(!BOOT) await loadCore();
+    teamMsg("Fetching your squad…","info");
+    const entry = await fetchJSON(`/entry/${id}/`);
+    // find a gameweek we can actually read picks for
+    let gw = TARGET_GW;
+    let picks = null;
+    const curEv = BOOT.events.find(e=>e.is_current);
+    const tryGws = [curEv && curEv.id, TARGET_GW-1, TARGET_GW, 1].filter(Boolean);
+    for(const g of tryGws){
+      try{ picks = await fetchJSON(`/entry/${id}/event/${g}/picks/`); gw=g; break; }catch(e){}
+    }
+    if(!picks) throw new Error("Couldn't read your picks yet (season/gameweek may not have started).");
+    DB.teamId = id;
+    DB.teamName = (entry.name||"") ;
+    DB.squad = picks.picks.map(x=>x.element);
+    DB.bank = (entry.last_deadline_bank!=null ? entry.last_deadline_bank/10 : DB.bank);
+    // chips already used
+    if(Array.isArray(entry.chips)) entry.chips.forEach(c=>{ DB.chips[c.name]={used:true,gw:c.event}; });
+    save();
+    document.getElementById("bankInput").value = DB.bank;
+    teamMsg(`Loaded “${DB.teamName}” — 15 players, bank £${DB.bank.toFixed(1)}m (from GW${gw}).`,"ok");
+    renderAll();
+  }catch(e){
+    teamMsg("Could not load team: "+e.message+". Check the ID, or the proxy may be busy — try again in a moment.","err");
+  }
+}
+
+// ============================================================
+//  RENDERING
+// ============================================================
+function renderAll(){ renderSquad(); renderAssessment(); renderGameweek(); renderLog(); renderChips(); }
+
+function squadByPos(){
+  const g={1:[],2:[],3:[],4:[]};
+  DB.squad.forEach(id=>{ const p=byId[id]; if(p) g[p.element_type].push(p); });
+  return g;
+}
+function renderSquad(){
+  const host=document.getElementById("squadView");
+  if(!DB.squad.length || !BOOT){ host.innerHTML='<p class="muted">No squad loaded yet.</p>'; return; }
+  const g=squadByPos(); const names={1:"Goalkeepers",2:"Defenders",3:"Midfielders",4:"Forwards"};
+  let html="";
+  [1,2,3,4].forEach(t=>{
+    if(!g[t].length) return;
+    html+=`<div class="squad-pos"><h4>${names[t]}</h4><div class="plist">`;
+    g[t].sort((a,b)=>proj5(b)-proj5(a)).forEach(p=>{
+      html+=`<div class="prow">
+        <span class="nm">${p.web_name}</span>
+        <span class="muted">${teamsById[p.team].short_name} · £${price(p).toFixed(1)}m</span>
+        <span>${statusFlag(p)}</span>
+        <span title="Projected next 5 GW">P5 <b>${proj5(p).toFixed(1)}</b></span>
+        <span style="min-width:120px">${fixtureStrip(p.team,3)}</span>
+        <button class="rm" data-rm="${p.id}" title="Remove">×</button>
+      </div>`;
+    });
+    html+="</div></div>";
+  });
+  host.innerHTML=html;
+  host.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{
+    DB.squad=DB.squad.filter(x=>x!=b.dataset.rm); save(); renderAll();
+  });
+}
+
+function renderAssessment(){
+  const panel=document.getElementById("assessPanel");
+  if(!DB.squad.length || !BOOT){ panel.style.display="none"; return; }
+  panel.style.display="block";
+  document.getElementById("assessTeamName").textContent = DB.teamName?("· "+DB.teamName):"";
+  const squad=DB.squad.map(id=>byId[id]).filter(Boolean);
+  const totVal=squad.reduce((s,p)=>s+price(p),0);
+  const pNext=squad.map(projNext).sort((a,b)=>b-a).slice(0,11).reduce((s,x)=>s+x,0); // top 11 = likely XI
+  const p5=squad.reduce((s,p)=>s+proj5(p),0);
+  const flagged=squad.filter(p=>availability(p)<1);
+  // fixture outlook: avg FDR of next 3 across squad
+  let diffs=[]; squad.forEach(p=>nextFixtures(p.team,3).forEach(f=>diffs.push(f.diff)));
+  const avgFdr=diffs.length?(diffs.reduce((a,b)=>a+b,0)/diffs.length):0;
+  // club concentration
+  const clubCount={}; squad.forEach(p=>clubCount[p.team]=(clubCount[p.team]||0)+1);
+  const heavy=Object.entries(clubCount).filter(([,n])=>n>=3).map(([t,n])=>`${teamsById[t].short_name} (${n})`);
+
+  const cards=[
+    ["Squad value", "£"+totVal.toFixed(1)+"m"],
+    ["Proj. this GW (XI)", pNext.toFixed(0)+" pts"],
+    ["Proj. next 5 GW", p5.toFixed(0)+" pts"],
+    ["Fixture outlook", avgFdr?avgFdr.toFixed(2)+" avg FDR":"—"],
+    ["Injury/doubt flags", String(flagged.length)],
+    ["Bank", "£"+(DB.bank||0).toFixed(1)+"m"],
+  ];
+  document.getElementById("assessCards").innerHTML=cards.map(c=>
+    `<div class="card"><div class="lbl">${c[0]}</div><div class="big">${c[1]}</div></div>`).join("");
+
+  // strengths / weaknesses notes
+  let notes=[];
+  if(flagged.length){
+    notes.push(`<div class="rec sell"><b>${flagged.length} player(s) flagged.</b> ${flagged.map(p=>p.web_name+" ("+statusText(p)+")").join(", ")}. These are dragging your projection — prioritise replacing anyone marked OUT.</div>`);
+  }else{
+    notes.push(`<div class="rec buy"><b>Clean bill of health.</b> No injured or suspended players in your squad.</div>`);
+  }
+  if(avgFdr && avgFdr<=2.6) notes.push(`<div class="rec buy"><b>Good fixtures ahead.</b> Your squad's average difficulty over the next 3 games is ${avgFdr.toFixed(2)} — favourable. Hold and back your players.</div>`);
+  else if(avgFdr>=3.3) notes.push(`<div class="rec sell"><b>Tough run.</b> Average difficulty ${avgFdr.toFixed(2)} — consider moving players with the hardest fixtures (see Tab 2).</div>`);
+  if(heavy.length) notes.push(`<div class="rec"><b>Club concentration:</b> ${heavy.join(", ")}. Fine when they're flying, but a blank from that club hits you hard.</div>`);
+  // bench strength: weakest 4 by proj5
+  const bench=[...squad].sort((a,b)=>proj5(a)-proj5(b)).slice(0,4);
+  const benchP5=bench.reduce((s,p)=>s+proj5(p),0);
+  if(benchP5<8) notes.push(`<div class="rec"><b>Thin bench.</b> Your four weakest players project just ${benchP5.toFixed(1)} pts over 5 GW — a Bench Boost wouldn't pay off yet.</div>`);
+  document.getElementById("assessNotes").innerHTML=notes.join("");
+}
+function statusText(p){
+  if(["i","s","u"].includes(p.status)) return p.status==="s"?"suspended":"out";
+  if(availability(p)<1) return Math.round(availability(p)*100)+"% chance";
+  return "ok";
+}
+
+// ---------- gameweek recommendations ----------
+function renderGameweek(){
+  const has=DB.squad.length && BOOT;
+  document.getElementById("gwEmpty").style.display=has?"none":"block";
+  document.getElementById("gwContent").style.display=has?"block":"none";
+  if(!has) return;
+  const squad=DB.squad.map(id=>byId[id]).filter(Boolean);
+
+  // CAPTAIN — highest projected next GW among available players
+  const capRanked=[...squad].filter(p=>availability(p)>0 && projNext(p)>0).sort((a,b)=>projNext(b)-projNext(a));
+  const cHost=document.getElementById("captainRec");
+  if(!capRanked.length){ cHost.innerHTML='<p class="muted">No player in your squad has a fixture this gameweek.</p>'; }
+  else{
+    const c=capRanked[0], alt=capRanked[1];
+    const dgw=(fixturesByTeam[c.team]||[]).filter(f=>f.event===TARGET_GW).length>1;
+    cHost.innerHTML=`<div class="rec cap"><b>© ${c.web_name}</b> (${teamsById[c.team].short_name}) — projected ${projNext(c).toFixed(1)} pts this GW${dgw?" · <b>double gameweek!</b>":""}.
+      <div class="muted" style="margin-top:4px">Next fixtures: ${fixtureStrip(c.team,3)}</div>
+      ${alt?`<div class="muted" style="margin-top:6px">Backup: ${alt.web_name} (${projNext(alt).toFixed(1)} pts).</div>`:""}</div>`;
+  }
+
+  // TRANSFERS — weakest 3 starters vs best affordable replacement in same position
+  const starters=[...squad].sort((a,b)=>proj5(b)-proj5(a));
+  const weak=[...squad].sort((a,b)=> (availability(a)-availability(b)) || (proj5(a)-proj5(b))).slice(0,3);
+  const owned=new Set(DB.squad.map(Number));
+  const tHost=document.getElementById("transferRec"); let th="";
+  weak.forEach(out=>{
+    const budget=(DB.bank||0)+price(out);
+    const cand=BOOT.elements.filter(p=>p.element_type===out.element_type && !owned.has(p.id)
+        && price(p)<=budget+0.001 && availability(p)>0)
+      .sort((a,b)=>proj5(b)-proj5(a))[0];
+    if(!cand) return;
+    const gain=proj5(cand)-proj5(out);
+    const worth = gain>=5;
+    th+=`<div class="rec ${gain>0?'buy':''}">
+      <b>OUT ${out.web_name}</b> (${proj5(out).toFixed(1)} P5${availability(out)<1?", "+statusText(out):""})
+      → <b>IN ${cand.web_name}</b> (${teamsById[cand.team].short_name}, £${price(cand).toFixed(1)}m, ${proj5(cand).toFixed(1)} P5)
+      <div class="muted" style="margin-top:4px">Net gain over 5 GW: <b>${gain>=0?"+":""}${gain.toFixed(1)} pts</b>.
+      ${DB.ft>0?"You have a free transfer — no hit.":`This would cost a −4 hit; ${worth?"the gain justifies it.":"probably <b>not</b> worth a hit — bank the transfer."}`}
+      </div>
+      <div class="muted" style="margin-top:4px">In-player fixtures: ${fixtureStrip(cand.team,3)}</div></div>`;
+  });
+  tHost.innerHTML=th||'<p class="muted">Your squad looks strong — no obvious upgrade within budget.</p>';
+
+  // CHIPS
+  const chipHost=document.getElementById("chipRec"); let ch=[];
+  const dgwTeams=new Set();
+  Object.keys(fixturesByTeam).forEach(t=>{ if(fixturesByTeam[t].filter(f=>f.event===TARGET_GW).length>1) dgwTeams.add(Number(t)); });
+  const myDgw=squad.filter(p=>dgwTeams.has(p.team));
+  const blanks=squad.filter(p=>(fixturesByTeam[p.team]||[]).filter(f=>f.event===TARGET_GW).length===0);
+  const chipUsed=n=>DB.chips[n] && DB.chips[n].used;
+
+  if(myDgw.length>=8 && !chipUsed("bboost"))
+    ch.push(`<div class="rec buy"><b>Consider Bench Boost.</b> ${myDgw.length} of your players have a double gameweek in GW${TARGET_GW} — your bench could add real points.</div>`);
+  const capP=capRanked[0];
+  if(capP && dgwTeams.has(capP.team) && parseFloat(capP.form)>=5 && !chipUsed("3xc"))
+    ch.push(`<div class="rec cap"><b>Triple Captain candidate.</b> ${capP.web_name} has a double gameweek and is in form — a strong TC window.</div>`);
+  if(blanks.length>=5 && !chipUsed("freehit"))
+    ch.push(`<div class="rec sell"><b>Free Hit worth a look.</b> ${blanks.length} of your players blank in GW${TARGET_GW}. A Free Hit fields a full team for one week.</div>`);
+  const needWork=squad.filter(p=>availability(p)===0).length + weak.filter(p=>proj5(p)<4).length;
+  if(needWork>=4 && !chipUsed("wildcard"))
+    ch.push(`<div class="rec"><b>Wildcard on the radar.</b> Several players are injured or out of form. If free transfers can't fix it in 1–2 weeks, a Wildcard resets the squad without hits.</div>`);
+  if(!ch.length) ch.push(`<p class="muted">No chip is signalled for GW${TARGET_GW}. Hold your chips for double/blank gameweeks and big fixture swings.</p>`);
+  chipHost.innerHTML=ch.join("");
+}
+
+// ---------- explorer ----------
+function renderExplorer(){
+  if(!BOOT){ return; }
+  const pos=+document.getElementById("fPos").value;
+  const maxP=parseFloat(document.getElementById("fPrice").value);
+  const maxO=parseFloat(document.getElementById("fOwn").value);
+  const sort=document.getElementById("fSort").value;
+  let rows=BOOT.elements.filter(p=>availability(p)>0);
+  if(pos) rows=rows.filter(p=>p.element_type===pos);
+  if(!isNaN(maxP)) rows=rows.filter(p=>price(p)<=maxP);
+  if(!isNaN(maxO)) rows=rows.filter(p=>parseFloat(p.selected_by_percent)<=maxO);
+  const keyf={proj5:proj5,value:value5,form:p=>parseFloat(p.form)||0,projnext:projNext};
+  rows.sort((a,b)=>keyf[sort](b)-keyf[sort](a));
+  rows=rows.slice(0,40);
+  const owned=new Set(DB.squad.map(Number));
+  const thead=document.querySelector("#exTable thead");
+  thead.innerHTML=`<tr><th>Player</th><th>Team</th><th>Pos</th><th>£m</th><th>Own%</th><th>Form</th>
+    <th>Proj GW</th><th>Proj 5GW</th><th>Val</th><th>Next 3</th><th></th></tr>`;
+  document.querySelector("#exTable tbody").innerHTML=rows.map(p=>`<tr>
+    <td><b>${p.web_name}</b></td><td>${teamsById[p.team].short_name}</td><td>${posName(p.element_type)}</td>
+    <td>${price(p).toFixed(1)}</td><td>${p.selected_by_percent}</td><td>${p.form}</td>
+    <td>${projNext(p).toFixed(1)}</td><td><b>${proj5(p).toFixed(1)}</b></td><td>${value5(p).toFixed(1)}</td>
+    <td>${fixtureStrip(p.team,3)}</td>
+    <td>${owned.has(p.id)?'<span class="muted">owned</span>':`<button class="btn ghost" style="padding:5px 10px" data-add="${p.id}">+ add</button>`}</td>
+  </tr>`).join("");
+  document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{
+    if(DB.squad.length>=15){ globalMsg("Squad already has 15 players — remove one first.","err",4000); return; }
+    if(!DB.squad.map(Number).includes(+b.dataset.add)){ DB.squad.push(+b.dataset.add); save(); renderAll(); renderExplorer(); }
+  });
+}
+
+// ---------- manual search ----------
+function renderManualSearch(){
+  const q=(document.getElementById("manualSearch").value||"").toLowerCase().trim();
+  const host=document.getElementById("manualResults");
+  if(!q||!BOOT){ host.innerHTML=""; return; }
+  const owned=new Set(DB.squad.map(Number));
+  const res=BOOT.elements.filter(p=>(p.web_name+" "+p.first_name+" "+p.second_name).toLowerCase().includes(q)).slice(0,8);
+  host.innerHTML=res.map(p=>`<div class="prow"><span class="nm">${p.web_name}</span>
+    <span class="muted">${teamsById[p.team].short_name} · ${posName(p.element_type)} · £${price(p).toFixed(1)}m</span>
+    <button class="btn ghost" style="padding:5px 10px;margin-left:auto" data-madd="${p.id}" ${owned.has(p.id)?"disabled":""}>${owned.has(p.id)?"added":"+ add"}</button></div>`).join("");
+  host.querySelectorAll("[data-madd]").forEach(b=>b.onclick=()=>{
+    if(DB.squad.length>=15){ globalMsg("Squad already has 15 players.","err",4000); return; }
+    DB.squad.push(+b.dataset.madd); save(); renderAll(); renderManualSearch();
+  });
+}
+
+// ---------- season log ----------
+function renderChips(){
+  const defs=[["wildcard","Wildcard"],["3xc","Triple Captain"],["bboost","Bench Boost"],["freehit","Free Hit"]];
+  document.getElementById("chipTracker").innerHTML=defs.map(([k,label])=>{
+    const c=DB.chips[k];
+    return `<div class="card"><div class="lbl">${label}</div>
+      <div class="big" style="font-size:18px">${c&&c.used?("Used GW"+(c.gw||"?")):"Available"}</div>
+      <button class="btn ghost" style="padding:6px 10px;margin-top:8px" data-chip="${k}">${c&&c.used?"Mark available":"Mark used"}</button></div>`;
+  }).join("");
+  document.querySelectorAll("[data-chip]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.chip; const c=DB.chips[k];
+    if(c&&c.used){ DB.chips[k]={used:false}; }
+    else{ DB.chips[k]={used:true,gw:TARGET_GW||""}; }
+    save(); renderChips(); renderGameweek();
+  });
+}
+function renderLog(){
+  document.getElementById("bankInput").value = DB.bank||0;
+  document.getElementById("ftInput").value = DB.ft??1;
+  const tb=document.querySelector("#logTable tbody");
+  const rows=[...DB.log].sort((a,b)=>b.gw-a.gw);
+  tb.innerHTML=rows.map((r,i)=>`<tr>
+    <td>${r.gw}</td><td><b>${r.pts}</b></td><td>${r.rank||"—"}</td><td>${r.ml||"—"}</td>
+    <td style="white-space:normal;max-width:280px">${r.note||""}</td>
+    <td><button class="rm" data-dellog="${r.gw}" title="Delete">×</button></td></tr>`).join("")
+    || '<tr><td colspan="6" class="muted">No gameweeks logged yet.</td></tr>';
+  tb.querySelectorAll("[data-dellog]").forEach(b=>b.onclick=()=>{
+    DB.log=DB.log.filter(x=>x.gw!=b.dataset.dellog); save(); renderLog();
+  });
+}
+
+// ============================================================
+//  UI wiring
+// ============================================================
+function globalMsg(msg,kind,timeout){
+  const el=document.getElementById("globalStatus");
+  el.className="status show "+(kind||"info"); el.textContent=msg;
+  if(timeout) setTimeout(()=>el.classList.remove("show"),timeout);
+}
+function teamMsg(msg,kind){
+  const el=document.getElementById("teamStatus"); el.className="status show "+(kind||"info"); el.textContent=msg;
+}
+function logMsg(msg,kind){
+  const el=document.getElementById("logStatus"); el.className="status show "+(kind||"info"); el.textContent=msg;
+  setTimeout(()=>el.classList.remove("show"),3000);
+}
+function switchTab(name){
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
+  ["team","gw","explorer","log","win"].forEach(t=>{
+    document.getElementById("tab-"+t).style.display = (t===name)?"block":"none";
+  });
+  if(name==="explorer" && BOOT) renderExplorer();
+}
+
+document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+document.getElementById("loadTeamBtn").onclick=loadTeamById;
+document.getElementById("applyFilters").onclick=()=>{ if(!BOOT){ loadCore().then(renderExplorer); } else renderExplorer(); };
+document.getElementById("manualSearch").oninput=renderManualSearch;
+document.getElementById("saveLogBtn").onclick=()=>{
+  const gw=+document.getElementById("logGw").value;
+  if(!gw){ logMsg("Enter a gameweek number.","err"); return; }
+  const rec={gw, pts:+document.getElementById("logPts").value||0,
+    rank:document.getElementById("logRank").value.trim(),
+    ml:document.getElementById("logMl").value.trim(),
+    note:document.getElementById("logNote").value.trim()};
+  DB.log=DB.log.filter(x=>x.gw!==gw); DB.log.push(rec); save(); renderLog();
+  document.getElementById("logGw").value=document.getElementById("logPts").value=
+    document.getElementById("logRank").value=document.getElementById("logMl").value=
+    document.getElementById("logNote").value="";
+  logMsg("Saved GW"+gw+".","ok");
+};
+document.getElementById("saveSettingsBtn").onclick=()=>{
+  DB.bank=parseFloat(document.getElementById("bankInput").value)||0;
+  DB.ft=parseInt(document.getElementById("ftInput").value)||0; save();
+  renderAll(); logMsg("Bank & transfers saved.","ok");
+};
+document.getElementById("wipeBtn").onclick=()=>{
+  if(confirm("Erase all saved data in this browser? This cannot be undone.")){
+    localStorage.removeItem(STORE_KEY); DB={}; ensure(); renderAll();
+    document.getElementById("assessPanel").style.display="none";
+    globalMsg("All saved data erased.","ok",3000);
+  }
+};
+
+// ---------- startup ----------
+(async function init(){
+  if(DB.teamId) document.getElementById("teamId").value=DB.teamId;
+  try{
+    await loadCore();
+    if(DB.squad && DB.squad.length){ renderAll(); }
+    else renderChips();
+  }catch(e){
+    globalMsg("Couldn't reach the FPL data feed right now (the free proxy may be busy). Click ‘Load my team’ to retry.","err");
+    renderChips();
+  }
+})();
+</script>
+</body>
+</html>
