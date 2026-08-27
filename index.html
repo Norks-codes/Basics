@@ -104,9 +104,10 @@
     <button data-tab="team" class="active">1 · My Team</button>
     <button data-tab="gw">2 · This Gameweek</button>
     <button data-tab="league">3 · My League</button>
-    <button data-tab="explorer">4 · Find Players</button>
-    <button data-tab="log">5 · Season Log</button>
-    <button data-tab="win">6 · How to Win</button>
+    <button data-tab="analysts">4 · Analysts</button>
+    <button data-tab="explorer">5 · Find Players</button>
+    <button data-tab="log">6 · Season Log</button>
+    <button data-tab="win">7 · How to Win</button>
   </nav>
 
   <!-- ============ TAB 1: MY TEAM ============ -->
@@ -182,6 +183,31 @@
         <h3>What your rivals are captaining</h3>
         <div id="leagueCaptains"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: ANALYSTS ============ -->
+  <section id="tab-analysts" style="display:none">
+    <div class="panel">
+      <h2>Analysts <span class="muted" id="solioFresh"></span></h2>
+      <p class="sub">Solio Analytics is one of the sharpest public models (it uses betting-market odds and expected-goals simulations). Here we put <b>their</b> projection next to <b>ours</b> — and hunt where they <b>disagree</b>, because agreement is safe but disagreement is where an edge (or a pundit blind-spot) hides.</p>
+      <div id="solioStatus" class="status info show">Loading Solio projections…</div>
+      <div id="solioBody" style="display:none">
+        <h3>Where we disagree most</h3>
+        <p class="sub">The interesting players. If Solio rates someone far higher than we do, their odds/xG model sees something our form-based one misses — worth a look. If we rate someone higher, be a little cautious, or it's a contrarian angle.</p>
+        <div id="solioDisagree"></div>
+        <h3>Solio's top projected — vs us</h3>
+        <div class="scroll"><table id="solioTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Pundit herd-detector</h2>
+      <p class="sub">You said the pundits (FPL Harvey, FPL Mate, Meerkats…) echo each other, so their "consensus" is often one idea repeated — copy it and you look like everyone else. Paste what they're saying and this separates the <b>herd</b> (everyone owns it — safe but no edge) from the <b>lone shouts</b> (few backing it — a possible differential).</p>
+      <label>Paste pundit takes — one per line, or just paste a bunch of text with player names in it</label>
+      <textarea id="punditText" rows="6" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit" placeholder="e.g.&#10;Harvey: bringing in Palmer and captaining Haaland&#10;FPL Mate: Saka differential, Gakpo punt&#10;Meerkats: Haaland (C), Palmer, Cunha"></textarea>
+      <div class="btnrow"><button class="btn alt" id="punditBtn">Analyse takes</button><button class="btn ghost" id="punditClear">Clear</button></div>
+      <div id="punditOut"></div>
     </div>
   </section>
 
@@ -329,6 +355,8 @@ let DB = load();                 // persisted state
 let BOOT = null;                 // bootstrap-static
 let FIXTURES = null;             // fixtures
 let LEAGUE = null;               // mini-league scouting (rival squads)
+let SOLIO = null;                // Solio Analytics projections
+let solioByEl = {};              // fpl element id -> solio row
 let byId = {};                   // player id -> element
 let teamsById = {};              // team id -> team
 let fixturesByTeam = {};         // team id -> [{event,diff,home,opp}]
@@ -351,6 +379,7 @@ function ensure(){
   DB.log = DB.log || [];            // [{gw,pts,rank,ml,note}]
   DB.teamId = DB.teamId || "";
   DB.teamName = DB.teamName || "";
+  DB.pundit = DB.pundit || "";
 }
 ensure();
 
@@ -409,6 +438,11 @@ async function loadCore(){
   Object.values(fixturesByTeam).forEach(a => a.sort((x,y)=>x.event-y.event));
   // mini-league scouting (bundled only — rival squads can't be fetched live)
   try{ LEAGUE = await loadLocal("league-picks.json"); }catch(e){ LEAGUE = null; }
+  // Solio Analytics projections (bundled)
+  try{
+    SOLIO = await loadLocal("solio.json"); solioByEl = {};
+    (SOLIO.players||[]).forEach((p,i)=>{ p.rank=i+1; if(p.element) solioByEl[p.element]=p; });
+  }catch(e){ SOLIO = null; solioByEl = {}; }
   globalMsg("Live data loaded ✓  Next gameweek: GW"+TARGET_GW, "ok", 4000);
   document.getElementById("gwTitle").textContent = "GW" + TARGET_GW;
 }
@@ -509,7 +543,7 @@ async function loadTeamById(){
 // ============================================================
 //  RENDERING
 // ============================================================
-function renderAll(){ renderSquad(); renderAssessment(); renderGameweek(); renderLeague(); renderLog(); renderChips(); }
+function renderAll(){ renderSquad(); renderAssessment(); renderGameweek(); renderLeague(); renderAnalysts(); renderLog(); renderChips(); }
 
 function squadByPos(){
   const g={1:[],2:[],3:[],4:[]};
@@ -700,6 +734,11 @@ function renderGameweek(){
     if(ro) note = ro.own>=ro.tot/2 ? ` — ${ro.own}/${ro.tot} rivals have him too, so it's the safe call`
                                     : ` — only ${ro.own}/${ro.tot} rivals own him, a bold differential captain`;
     bullets.push(`Captain <b>${cap.web_name}</b> (${projNext(cap).toFixed(1)} proj pts)${note}.`);
+    if(SOLIO && SOLIO.players && SOLIO.players.length){
+      const top=SOLIO.players.find(s=>s.element);
+      if(top && top.element===cap.id) bullets.push(`<span class="muted">✓ Solio agrees — same top pick.</span>`);
+      else if(top) bullets.push(`<span class="muted">Solio's top pick is <b>${byId[top.element]?byId[top.element].web_name:top.name}</b> (${top.proj.toFixed(2)}) — weigh it as an alternative captain.</span>`);
+    }
   }
   if(best && best.gain>0){
     const verdict = DB.ft>0 ? "you have a free transfer, so no hit" : (best.worth?"worth the −4 hit":"<b>not</b> worth a −4 — bank it");
@@ -787,6 +826,78 @@ function renderLeague(){
   document.getElementById("leagueCaptains").innerHTML=caps.length?caps.map(c=>
     `<div class="rec cap"><b>${c.p.web_name}</b> — captained by <b>${c.n}/${nRivals}</b> rivals. ${!mySet.has(c.p.id)?"You don't own him — if he hauls, they all pull away from you.":(c.n>=nRivals/2?"You own him too — captaining him keeps pace.":"")}</div>`
   ).join(""):'<p class="muted">No rival captain data for this gameweek yet.</p>';
+}
+
+// ---------- analysts: Solio vs us ----------
+function renderAnalysts(){
+  const status=document.getElementById("solioStatus");
+  const body=document.getElementById("solioBody");
+  if(!BOOT){ status.className="status info show"; status.textContent="Loading…"; body.style.display="none"; return; }
+  if(!SOLIO || !SOLIO.players || !SOLIO.players.length){
+    status.className="status info show";
+    status.textContent="Solio data isn't ready yet. Run the ‘Update FPL data’ action once, then refresh.";
+    body.style.display="none";
+  }else{
+    status.classList.remove("show"); body.style.display="block";
+    document.getElementById("solioFresh").textContent = SOLIO.gw?`· GW${SOLIO.gw} · Solio updated ${SOLIO.generated||""}`:"";
+    const rows=SOLIO.players.filter(s=>s.element&&byId[s.element]).map(s=>{
+      const p=byId[s.element], ours=projNext(p);
+      return {s,p,ours,solio:s.proj,delta:s.proj-ours};
+    });
+    document.querySelector("#solioTable thead").innerHTML=`<tr><th>#</th><th>Player</th><th>Team</th><th>Solio</th><th>Us</th><th>Verdict</th><th>Own%</th></tr>`;
+    document.querySelector("#solioTable tbody").innerHTML=rows.map((r,i)=>{
+      const agree=Math.abs(r.delta)<=1.0;
+      const tag=agree?'<span class="pill fdr1">agree</span>':(r.delta>0?'<span class="pill fdr4">Solio higher</span>':'<span class="pill fdr3">we\'re higher</span>');
+      const mine=DB.squad&&DB.squad.map(Number).includes(r.p.id)?' <span class="pill fdr1">yours</span>':'';
+      return `<tr><td>${i+1}</td><td><b>${r.p.web_name}</b>${mine}</td><td>${teamsById[r.p.team].short_name}</td>
+        <td><b>${r.solio.toFixed(2)}</b></td><td>${r.ours.toFixed(2)}</td><td>${tag}</td><td class="muted">${r.s.own!=null?r.s.own+'%':''}</td></tr>`;
+    }).join("");
+    const disag=[...rows].sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)).slice(0,6);
+    document.getElementById("solioDisagree").innerHTML=disag.map(r=>{
+      const higher=r.delta>0;
+      return `<div class="rec ${higher?'buy':'sell'}"><b>${r.p.web_name}</b> (${teamsById[r.p.team].short_name}) — Solio <b>${r.solio.toFixed(2)}</b> vs our <b>${r.ours.toFixed(2)}</b>.
+        ${higher?"Solio backs him well above us — their odds/xG model likes this fixture. Worth a serious look.":"We rate him above Solio — a contrarian angle, or a caution flag; check his minutes and fixture."}</div>`;
+    }).join("")||'<p class="muted">The two models agree closely this week.</p>';
+  }
+  renderPundit();
+}
+
+// ---------- pundit herd-detector ----------
+function renderPundit(){
+  const out=document.getElementById("punditOut");
+  const ta=document.getElementById("punditText");
+  if(DB.pundit && !ta.value) ta.value=DB.pundit;
+  const text=(DB.pundit||"");
+  if(!text.trim()||!BOOT){ out.innerHTML=""; return; }
+  const low=text.toLowerCase();
+  const counts={};
+  BOOT.elements.forEach(p=>{
+    let hit=0;
+    [p.web_name,p.second_name].filter(Boolean).forEach(nm=>{
+      const t=nm.toLowerCase(); if(t.length<3) return;
+      let idx=0,c=0; while((idx=low.indexOf(t,idx))>=0){c++; idx+=t.length;}
+      hit=Math.max(hit,c);
+    });
+    if(hit>0) counts[p.id]=hit;
+  });
+  const list=Object.keys(counts).map(id=>({p:byId[id],n:counts[id]})).filter(x=>x.p).sort((a,b)=>b.n-a.n);
+  if(!list.length){ out.innerHTML='<p class="muted">No player names recognised in that text. Try including surnames.</p>'; return; }
+  const maxN=list[0].n;
+  const herd=list.filter(x=>x.n>=Math.max(2,maxN*0.6));
+  const lone=list.filter(x=>x.n===1);
+  const row=(x,kind)=>{
+    const p=x.p, ours=projNext(p), s=solioByEl[p.id];
+    const mine=DB.squad&&DB.squad.map(Number).includes(p.id)?' · <span class="pill fdr1">you own</span>':'';
+    return `<div class="rec ${kind}"><b>${p.web_name}</b> (${teamsById[p.team].short_name}) — mentioned <b>${x.n}×</b>${mine}.
+      <div class="muted" style="margin-top:4px">Our proj this GW: <b>${ours.toFixed(1)}</b>${s?` · Solio: <b>${s.proj.toFixed(2)}</b>`:""} · ${fixtureStrip(p.team,3)}</div></div>`;
+  };
+  out.innerHTML =
+    `<h3>The herd — everyone's saying it</h3>
+     <p class="sub">Widely repeated = template. Owning it keeps pace but won't move you up — though <b>not</b> owning a template captain is the real danger.</p>`
+    + (herd.length?herd.map(x=>row(x,"sell")).join(""):'<p class="muted">No strong consensus in that text.</p>')
+    + `<h3>Lone shouts — a possible edge</h3>
+       <p class="sub">Backed by only one voice. If our model or Solio also likes them, that's a differential worth a punt.</p>`
+    + (lone.length?lone.map(x=>row(x,"buy")).join(""):'<p class="muted">No standout single-voice picks.</p>');
 }
 
 // ---------- explorer ----------
@@ -884,17 +995,24 @@ function logMsg(msg,kind){
 }
 function switchTab(name){
   document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
-  ["team","gw","league","explorer","log","win"].forEach(t=>{
+  ["team","gw","league","analysts","explorer","log","win"].forEach(t=>{
     document.getElementById("tab-"+t).style.display = (t===name)?"block":"none";
   });
   if(name==="explorer" && BOOT) renderExplorer();
   if(name==="league") renderLeague();
+  if(name==="analysts") renderAnalysts();
 }
 
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 document.getElementById("loadTeamBtn").onclick=loadTeamById;
 document.getElementById("applyFilters").onclick=()=>{ if(!BOOT){ loadCore().then(renderExplorer); } else renderExplorer(); };
 document.getElementById("manualSearch").oninput=renderManualSearch;
+document.getElementById("punditBtn").onclick=()=>{
+  DB.pundit=document.getElementById("punditText").value; save(); renderPundit();
+};
+document.getElementById("punditClear").onclick=()=>{
+  DB.pundit=""; document.getElementById("punditText").value=""; save(); renderPundit();
+};
 document.getElementById("saveLogBtn").onclick=()=>{
   const gw=+document.getElementById("logGw").value;
   if(!gw){ logMsg("Enter a gameweek number.","err"); return; }
@@ -927,7 +1045,7 @@ document.getElementById("wipeBtn").onclick=()=>{
   try{
     await loadCore();
     if(DB.squad && DB.squad.length){ renderAll(); }
-    else { renderChips(); renderLeague(); }
+    else { renderChips(); renderLeague(); renderAnalysts(); }
   }catch(e){
     globalMsg("FPL data isn't ready yet. If you just set this up, run the ‘Update FPL data’ action once (Actions tab → Run workflow), wait a minute, then refresh.","err");
     renderChips();
