@@ -47,6 +47,102 @@ def get(path, tries=4):
     raise RuntimeError(f"Failed to fetch {url}: {last}")
 
 
+from html.parser import HTMLParser
+import unicodedata
+
+
+class _TableParser(HTMLParser):
+    """Collect every <table> as a list of rows, each a list of cell texts."""
+    def __init__(self):
+        super().__init__()
+        self.tables, self.cur, self.row, self.cell = [], None, None, None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table": self.cur = []
+        elif tag == "tr" and self.cur is not None: self.row = []
+        elif tag in ("td", "th") and self.row is not None: self.cell = []
+
+    def handle_data(self, data):
+        if self.cell is not None: self.cell.append(data)
+
+    def handle_endtag(self, tag):
+        if tag in ("td", "th") and self.cell is not None:
+            self.row.append("".join(self.cell).strip()); self.cell = None
+        elif tag == "tr" and self.row is not None:
+            self.cur.append(self.row); self.row = None
+        elif tag == "table" and self.cur is not None:
+            self.tables.append(self.cur); self.cur = None
+
+
+def _norm(s):
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode()
+    return _re_mod.sub(r"[^a-z]", "", s.lower())
+
+
+import re as _re_mod
+
+
+def parse_solio(html, boot):
+    """Extract Solio's projection table and match each player to an FPL id."""
+    p = _TableParser(); p.feed(html)
+    target = None
+    for t in p.tables:
+        if not t: continue
+        header = [c.lower() for c in t[0]]
+        if any("player" in c for c in header) and any("proj" in c for c in header):
+            target = t; break
+    if not target: return None
+    header = [c.lower() for c in target[0]]
+
+    def col(*names):
+        for i, c in enumerate(header):
+            if any(n in c for n in names): return i
+        return None
+    ci_name, ci_team, ci_pos = col("player"), col("team"), col("pos")
+    ci_price, ci_proj, ci_own = col("price"), col("proj"), col("own")
+    if ci_name is None or ci_proj is None: return None
+
+    short = {t["short_name"].upper(): t["id"] for t in boot["teams"]}
+    posmap = {"GK": 1, "GKP": 1, "DEF": 2, "MID": 3, "FWD": 4, "FOR": 4}
+    elems = boot["elements"]
+
+    def num(x):
+        try: return float(_re_mod.sub(r"[^0-9.]", "", x))
+        except Exception: return None
+
+    players = []
+    for row in target[1:]:
+        need = [i for i in (ci_name, ci_proj) if i is not None]
+        if len(row) <= max(need): continue
+        name = row[ci_name].strip()
+        proj = num(row[ci_proj])
+        if not name or proj is None: continue
+        team = row[ci_team].strip().upper() if ci_team is not None else ""
+        pos = posmap.get(row[ci_pos].strip().upper()) if ci_pos is not None else None
+        price = num(row[ci_price]) if ci_price is not None else None
+        own = num(row[ci_own]) if ci_own is not None else None
+
+        eid, tid, nn = None, short.get(team), _norm(name)
+        if tid:
+            best, bestscore = None, 0
+            for e in elems:
+                if e["team"] != tid: continue
+                if pos is not None and e["element_type"] != pos: continue
+                wn, sn, fn = _norm(e["web_name"]), _norm(e.get("second_name", "")), _norm(e.get("first_name", ""))
+                score = 0
+                if nn == wn: score = 100
+                elif nn == fn: score = 75
+                elif nn and (nn in sn or sn in nn): score = 80
+                elif nn and len(nn) >= 4 and (nn[-4:] in wn or wn[-4:] in nn): score = 45
+                if score and price is not None:
+                    score -= abs(e["now_cost"] / 10 - price)
+                if score > bestscore: bestscore, best = score, e
+            if best and bestscore > 0: eid = best["id"]
+        players.append({"name": name, "team": team, "proj": proj,
+                        "price": price, "own": own, "element": eid})
+    return players
+
+
 def get_url(url, tries=3):
     """GET any absolute URL, returning parsed JSON."""
     last = None
@@ -155,25 +251,25 @@ def main():
     print("Fetching Solio Analytics projections…")
     solio_ok = False
     try:
-        import re as _re
         req = urllib.request.Request(SOLIO_URL, headers=HEADERS)
         with urllib.request.urlopen(req, timeout=30) as r:
             body = r.read().decode("utf-8", "replace")
-        print(f"  page {len(body)} bytes")
-        # Save the raw page once so we can inspect where the data lives.
-        with open(os.path.join(OUT, "solio_page.html"), "w", encoding="utf-8") as f:
-            f.write(body)
-        m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', body, _re.S)
-        if m:
-            data = json.loads(m.group(1))
-            write("solio.json", data)
+        gwm = _re_mod.search(r"Gameweek\s+(\d+)", body)
+        genm = _re_mod.search(r"Generated\s+([\d.]+\s+[\d:]+\s+UTC)", body)
+        players = parse_solio(body, boot)
+        if players:
+            matched = sum(1 for p in players if p["element"])
+            write("solio.json", {
+                "generated": genm.group(1) if genm else None,
+                "gw": int(gwm.group(1)) if gwm else None,
+                "source": "Solio Analytics",
+                "url": SOLIO_URL,
+                "players": players,
+            })
             solio_ok = True
-            print("  extracted __NEXT_DATA__ ✓ top keys:", list(data.keys()))
+            print(f"  solio ✓ {len(players)} players, {matched} matched to FPL ids")
         else:
-            low = body.lower()
-            print("  no __NEXT_DATA__. markers -> projection:", "projection" in low,
-                  "| expected:", "expected" in low, "| __next_f:", "__next_f" in body,
-                  "| self.__next:", "self.__next" in body)
+            print("  solio: could not find projection table")
     except Exception as e:  # noqa: BLE001
         print(f"  solio fetch failed: {e}")
 
