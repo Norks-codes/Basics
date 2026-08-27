@@ -242,7 +242,7 @@
 </main>
 
 <footer>
-  Data: official Fantasy Premier League feed, read through a public CORS proxy (the site blocks direct browser access).
+  Data: official Fantasy Premier League feed, refreshed automatically every couple of hours by a GitHub Action and read from this site (no proxy). Any other Team ID falls back to a live relay.
   This is an unofficial personal tool and is not affiliated with the Premier League. Projections are estimates, not guarantees.
 </footer>
 
@@ -262,6 +262,11 @@ const PROXIES = [
   u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
   u => "https://thingproxy.freeboard.io/fetch/" + u,
 ];
+
+// Your team is pre-fetched into /data by the GitHub robot, so loading it is
+// instant and never depends on a flaky proxy. Other IDs fall back to live proxy.
+const BAKED_ID = "2537434";
+const LEAGUE_ID = "52140";
 
 const STORE_KEY = "fplEdge.v1";
 let DB = load();                 // persisted state
@@ -313,11 +318,25 @@ async function fetchJSON(path){
   throw lastErr || new Error("All data relays are busy right now");
 }
 
+// Read a bundled data file that the GitHub robot saved into /data. Same origin,
+// so this is fast and reliable — no proxy involved.
+let DATA_SOURCE = "bundled";
+async function loadLocal(file){
+  const res = await fetch("./data/" + file, {cache:"no-store"});
+  if(!res.ok) throw new Error("no bundled "+file);
+  return res.json();
+}
+// Prefer the bundled file; if it isn't there yet, fall back to a live proxy call.
+async function getData(file, apiPath){
+  try{ return await loadLocal(file); }
+  catch(e){ DATA_SOURCE = "live"; return await fetchJSON(apiPath); }
+}
+
 // ---------- boot data ----------
 async function loadCore(){
-  globalMsg("Loading live FPL data…","info");
-  BOOT = await fetchJSON("/bootstrap-static/");
-  FIXTURES = await fetchJSON("/fixtures/");
+  globalMsg("Loading FPL data…","info");
+  BOOT = await getData("bootstrap.json", "/bootstrap-static/");
+  FIXTURES = await getData("fixtures.json", "/fixtures/");
   byId = {}; teamsById = {}; fixturesByTeam = {};
   BOOT.elements.forEach(p => byId[p.id] = p);
   BOOT.teams.forEach(t => { teamsById[t.id] = t; fixturesByTeam[t.id] = []; });
@@ -393,14 +412,22 @@ async function loadTeamById(){
   try{
     if(!BOOT) await loadCore();
     teamMsg("Fetching your squad…","info");
-    const entry = await fetchJSON(`/entry/${id}/`);
+    const baked = (id === BAKED_ID);
+    const entry = baked ? await getData(`entry-${id}.json`, `/entry/${id}/`)
+                        : await fetchJSON(`/entry/${id}/`);
     // find a gameweek we can actually read picks for
     let gw = TARGET_GW;
     let picks = null;
-    const curEv = BOOT.events.find(e=>e.is_current);
-    const tryGws = [curEv && curEv.id, TARGET_GW-1, TARGET_GW, 1].filter(Boolean);
-    for(const g of tryGws){
-      try{ picks = await fetchJSON(`/entry/${id}/event/${g}/picks/`); gw=g; break; }catch(e){}
+    if(baked){
+      try{ picks = await loadLocal(`picks-${id}.json`);
+           gw = (picks.entry_history && picks.entry_history.event) || gw; }catch(e){}
+    }
+    if(!picks){
+      const curEv = BOOT.events.find(e=>e.is_current);
+      const tryGws = [curEv && curEv.id, TARGET_GW-1, TARGET_GW, 1].filter(Boolean);
+      for(const g of tryGws){
+        try{ picks = await fetchJSON(`/entry/${id}/event/${g}/picks/`); gw=g; break; }catch(e){}
+      }
     }
     if(!picks) throw new Error("Couldn't read your picks yet (season/gameweek may not have started).");
     DB.teamId = id;
@@ -710,7 +737,7 @@ document.getElementById("wipeBtn").onclick=()=>{
     if(DB.squad && DB.squad.length){ renderAll(); }
     else renderChips();
   }catch(e){
-    globalMsg("Couldn't reach the FPL data feed right now (the free proxy may be busy). Click ‘Load my team’ to retry.","err");
+    globalMsg("FPL data isn't ready yet. If you just set this up, run the ‘Update FPL data’ action once (Actions tab → Run workflow), wait a minute, then refresh.","err");
     renderChips();
   }
 })();

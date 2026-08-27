@@ -1,0 +1,49 @@
+name: Update FPL data
+
+# When this runs:
+#  - on a schedule (every 2 hours), so your data stays fresh automatically
+#  - whenever you click "Run workflow" in the Actions tab (manual)
+#  - whenever the fetch script itself changes
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/fetch_fpl.py"
+      - ".github/workflows/fetch-fpl.yml"
+
+# Allow the workflow to commit the refreshed data back into the repo.
+permissions:
+  contents: write
+
+concurrency:
+  group: fpl-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch FPL data
+        run: python scripts/fetch_fpl.py
+
+      - name: Commit updated data (if anything changed)
+        run: |
+          git config user.name "fpl-data-bot"
+          git config user.email "actions@github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Update FPL data ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            git push
+          fi
