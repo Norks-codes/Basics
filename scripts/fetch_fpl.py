@@ -154,30 +154,28 @@ def main():
 
     print("Fetching Solio Analytics projections…")
     solio_ok = False
-    candidates = [
-        SOLIO_URL,
-        "https://fpl.solioanalytics.com/api/data",
-        "https://fpl.solioanalytics.com/api/projections/latest",
-        "https://fpl.solioanalytics.com/data/latest.json",
-        "https://solioanalytics.com/api/data/latest",
-    ]
-    for cand in candidates:
-        try:
-            req = urllib.request.Request(cand, headers=HEADERS)
-            with urllib.request.urlopen(req, timeout=30) as r:
-                ct = r.headers.get("Content-Type", "?")
-                body = r.read().decode("utf-8", "replace")
-            print(f"  {cand} -> {ct}, {len(body)} bytes; head={body[:160]!r}")
-            try:
-                data = json.loads(body)
-                write("solio.json", data)
-                solio_ok = True
-                print("  solio saved ✓")
-                break
-            except Exception:  # noqa: BLE001
-                pass  # not JSON — keep probing
-        except Exception as e:  # noqa: BLE001
-            print(f"  {cand} failed: {e}")
+    try:
+        import re as _re
+        req = urllib.request.Request(SOLIO_URL, headers=HEADERS)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            body = r.read().decode("utf-8", "replace")
+        print(f"  page {len(body)} bytes")
+        # Save the raw page once so we can inspect where the data lives.
+        with open(os.path.join(OUT, "solio_page.html"), "w", encoding="utf-8") as f:
+            f.write(body)
+        m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', body, _re.S)
+        if m:
+            data = json.loads(m.group(1))
+            write("solio.json", data)
+            solio_ok = True
+            print("  extracted __NEXT_DATA__ ✓ top keys:", list(data.keys()))
+        else:
+            low = body.lower()
+            print("  no __NEXT_DATA__. markers -> projection:", "projection" in low,
+                  "| expected:", "expected" in low, "| __next_f:", "__next_f" in body,
+                  "| self.__next:", "self.__next" in body)
+    except Exception as e:  # noqa: BLE001
+        print(f"  solio fetch failed: {e}")
 
     meta = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
