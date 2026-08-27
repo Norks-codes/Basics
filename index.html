@@ -257,8 +257,9 @@ const API = "https://fantasy.premierleague.com/api";
 // The FPL API blocks direct browser calls (no CORS header). We route through
 // public proxies and try them in order until one succeeds.
 const PROXIES = [
-  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
   u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
   u => "https://thingproxy.freeboard.io/fetch/" + u,
 ];
 
@@ -297,13 +298,19 @@ async function fetchJSON(path){
   let lastErr;
   for(const wrap of PROXIES){
     try{
-      const res = await fetch(wrap(url), {headers:{"Accept":"application/json"}});
+      // Give each proxy up to 12s, then move on so we never hang silently.
+      const ctrl = new AbortController();
+      const timer = setTimeout(()=>ctrl.abort(), 12000);
+      let res;
+      try{
+        res = await fetch(wrap(url), {headers:{"Accept":"application/json"}, signal:ctrl.signal});
+      } finally { clearTimeout(timer); }
       if(!res.ok) throw new Error("HTTP "+res.status);
       const text = await res.text();
       return JSON.parse(text);
     }catch(e){ lastErr = e; }
   }
-  throw lastErr || new Error("All proxies failed");
+  throw lastErr || new Error("All data relays are busy right now");
 }
 
 // ---------- boot data ----------
@@ -379,6 +386,10 @@ function fixtureStrip(teamId, n){
 async function loadTeamById(){
   const id = (document.getElementById("teamId").value||"").replace(/\D/g,"");
   if(!id){ teamMsg("Enter your numeric Team ID first.","err"); return; }
+  const btn = document.getElementById("loadTeamBtn");
+  btn.disabled = true; const btnLabel = btn.textContent; btn.textContent = "Loading…";
+  teamMsg("Working… loading live FPL data (this can take a few seconds).","info");
+  document.getElementById("teamStatus").scrollIntoView({behavior:"smooth", block:"center"});
   try{
     if(!BOOT) await loadCore();
     teamMsg("Fetching your squad…","info");
@@ -403,7 +414,9 @@ async function loadTeamById(){
     teamMsg(`Loaded “${DB.teamName}” — 15 players, bank £${DB.bank.toFixed(1)}m (from GW${gw}).`,"ok");
     renderAll();
   }catch(e){
-    teamMsg("Could not load team: "+e.message+". Check the ID, or the proxy may be busy — try again in a moment.","err");
+    teamMsg("Could not load team: "+e.message+". Check the ID, or the data relay may be busy — wait a few seconds and click again.","err");
+  }finally{
+    btn.disabled = false; btn.textContent = btnLabel;
   }
 }
 
