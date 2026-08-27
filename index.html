@@ -262,6 +262,38 @@
       </ul>
       <p class="hint">Sources: Premier League FPL champion guide, Fantasy Football Scout, Fantasy Football Fix. See the README in the repository for links.</p>
     </div>
+
+    <div class="panel">
+      <h2>How this tool makes its calls</h2>
+      <p class="sub">No black box. Here's exactly what every projection and recommendation is built from.</p>
+
+      <h3>1 · A player's base scoring rate</h3>
+      <p>We blend recent <b>form</b> with season-long <b>points-per-game</b> so a player is judged on how hot he is <i>and</i> his proven level:</p>
+      <div class="rec"><b>base = 0.65 × form + 0.35 × points-per-game</b> <span class="muted">(if a player has no form yet, we use points-per-game alone.)</span></div>
+
+      <h3>2 · Fixture difficulty</h3>
+      <p>Each upcoming match is scaled by how hard it is (FPL's own 1–5 difficulty rating). Easy games lift a projection; hard ones cut it:</p>
+      <div class="scroll"><table><thead><tr><th>Difficulty</th><th>1 (easiest)</th><th>2</th><th>3</th><th>4</th><th>5 (hardest)</th></tr></thead>
+      <tbody><tr><td>Multiplier</td><td>×1.25</td><td>×1.10</td><td>×1.00</td><td>×0.85</td><td>×0.70</td></tr></tbody></table></div>
+
+      <h3>3 · Chance of playing</h3>
+      <p>Minutes are everything, so we discount anyone who might not start: <b>injured / suspended = 0</b>, <b>doubtful = their % chance</b> (or 50% if none is given), <b>fit = full</b>.</p>
+
+      <h3>4 · The projection</h3>
+      <div class="rec buy"><b>Projected points = base × fixture multiplier × chance of playing</b>, summed across the games in that window (it doubles up in a double gameweek). <b>Proj 5GW</b> is this over the next five matches; <b>Value</b> is Proj 5GW ÷ price.</div>
+
+      <h3>5 · Turning that into advice</h3>
+      <ul class="strat">
+        <li><b>Captain</b> = your available player with the highest <i>next-gameweek</i> projection.</li>
+        <li><b>Transfers</b> = your weakest projected starters vs the best player you can afford in the same position. A move is only flagged "worth a −4 hit" if it gains ~5+ points over 5 gameweeks.</li>
+        <li><b>Mini-league</b> = the above, then cross-checked against what your rivals own (threats, differentials, safe vs bold captain).</li>
+      </ul>
+
+      <h3>Where this is strong — and its limits</h3>
+      <p class="sub">Honest about the edges:</p>
+      <div class="rec buy"><b>Strengths:</b> fully transparent, always current (auto-updated), and — unlike the pundits — it knows <b>your</b> 32-manager league and plays it directly.</div>
+      <div class="rec sell"><b>Limits:</b> it uses FPL's official stats (form, fixtures, fitness). It doesn't yet use bookmaker odds or deep expected-goals modelling the way a premium tool like Solio does — so treat projections as <b>a well-reasoned estimate, not a guarantee</b>, and let a clear eye-test overrule a marginal call.</div>
+    </div>
   </section>
 </main>
 

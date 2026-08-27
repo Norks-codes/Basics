@@ -154,12 +154,30 @@ def main():
 
     print("Fetching Solio Analytics projections…")
     solio_ok = False
-    try:
-        solio = get_url(SOLIO_URL)
-        write("solio.json", solio)
-        solio_ok = True
-    except Exception as e:  # noqa: BLE001
-        print(f"  solio fetch failed: {e}")
+    candidates = [
+        SOLIO_URL,
+        "https://fpl.solioanalytics.com/api/data",
+        "https://fpl.solioanalytics.com/api/projections/latest",
+        "https://fpl.solioanalytics.com/data/latest.json",
+        "https://solioanalytics.com/api/data/latest",
+    ]
+    for cand in candidates:
+        try:
+            req = urllib.request.Request(cand, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=30) as r:
+                ct = r.headers.get("Content-Type", "?")
+                body = r.read().decode("utf-8", "replace")
+            print(f"  {cand} -> {ct}, {len(body)} bytes; head={body[:160]!r}")
+            try:
+                data = json.loads(body)
+                write("solio.json", data)
+                solio_ok = True
+                print("  solio saved ✓")
+                break
+            except Exception:  # noqa: BLE001
+                pass  # not JSON — keep probing
+        except Exception as e:  # noqa: BLE001
+            print(f"  {cand} failed: {e}")
 
     meta = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
