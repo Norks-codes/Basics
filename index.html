@@ -160,6 +160,8 @@
         <div id="transferRec"></div>
         <h3>Chip watch</h3>
         <div id="chipRec"></div>
+        <h3>Chip roadmap (season)</h3>
+        <div id="chipRoadmap"></div>
       </div>
     </div>
   </section>
@@ -295,7 +297,8 @@
 
       <h3>1 · A player's base scoring rate</h3>
       <p>We blend recent <b>form</b> with season-long <b>points-per-game</b> so a player is judged on how hot he is <i>and</i> his proven level:</p>
-      <div class="rec"><b>base = 0.65 × form + 0.35 × points-per-game</b> <span class="muted">(if a player has no form yet, we use points-per-game alone.)</span></div>
+      <div class="rec"><b>base = 60% "what he's actually scored" (form + points-per-game) + 40% "what his underlying numbers imply"</b></div>
+      <p>That second half is the sharp part — instead of just trusting past points, we estimate what a player <i>should</i> score from: <b>expected goals & assists</b> (xG/xA), <b>clean-sheet odds</b> (from expected goals conceded), and — for defenders and midfielders — <b>DefCon points</b> (the +2 for defensive actions that the cheap-defender meta is built on). Everything is scaled by how reliably he <b>starts</b>.</p>
 
       <h3>2 · Fixture difficulty</h3>
       <p>Each upcoming match is scaled by how hard it is (FPL's own 1–5 difficulty rating). Easy games lift a projection; hard ones cut it:</p>
@@ -318,7 +321,7 @@
       <h3>Where this is strong — and its limits</h3>
       <p class="sub">Honest about the edges:</p>
       <div class="rec buy"><b>Strengths:</b> fully transparent, always current (auto-updated), and — unlike the pundits — it knows <b>your</b> 32-manager league and plays it directly.</div>
-      <div class="rec sell"><b>Limits:</b> it uses FPL's official stats (form, fixtures, fitness). It doesn't yet use bookmaker odds or deep expected-goals modelling the way a premium tool like Solio does — so treat projections as <b>a well-reasoned estimate, not a guarantee</b>, and let a clear eye-test overrule a marginal call.</div>
+      <div class="rec sell"><b>Limits:</b> it now uses expected goals/assists, clean-sheet odds and DefCon — but not bookmaker odds or minute-by-minute simulations the way a premium tool like Solio does. Early in the season the underlying numbers are noisy (few games played), so treat projections as <b>a well-reasoned estimate, not a guarantee</b>, and let a clear eye-test overrule a marginal call.</div>
     </div>
   </section>
 </main>
@@ -454,9 +457,37 @@ function availability(p){
   if(p.status === "d") return 0.5;                          // doubtful, no % given
   return 1;
 }
+// ---- underlying-stats engine (playbook: xG/xA, DefCon, minutes) ----
+function p90(p, field){ return parseFloat(p[field]) || 0; }
+function goalValue(t){ return t<=2 ? 6 : (t===3 ? 5 : 4); }   // GK/DEF 6, MID 5, FWD 4
+function startRate(p){
+  const s = p90(p, "starts_per_90");
+  if(s > 0) return Math.min(1, s);
+  const m = parseFloat(p.minutes)||0;                          // fallback early season
+  return m >= 600 ? 1 : Math.max(0.2, m/900);
+}
+function isPenTaker(p){ return p.penalties_order != null && +p.penalties_order === 1; }
+function isSetPiece(p){ return p.corners_and_indirect_freekicks_order != null && +p.corners_and_indirect_freekicks_order <= 2; }
+function minutesRisk(p){ return startRate(p) < 0.65 && (parseFloat(p.minutes)||0) > 0; }
+// expected points per game implied by underlying numbers
+function underlyingPPG(p){
+  const t = p.element_type;
+  const xg = p90(p,"expected_goals_per_90"), xa = p90(p,"expected_assists_per_90");
+  let pts = xg*goalValue(t) + xa*3;                            // attacking returns
+  const xgc = p90(p,"expected_goals_conceded_per_90");
+  const pCS = xgc > 0 ? Math.exp(-xgc) : 0.30;                 // Poisson clean-sheet prob
+  if(t <= 2) pts += pCS*4; else if(t === 3) pts += pCS*1;      // clean-sheet points
+  const dc = p90(p,"defensive_contribution_per_90");           // DefCon meta
+  const thr = t === 2 ? 10 : (t === 3 ? 12 : 0);
+  if(thr && dc > 0) pts += 2 * Math.min(1.1, dc/thr);
+  pts += 2;                                                    // appearance (60+ mins)
+  return pts * startRate(p);
+}
 function baseForm(p){
   const f = parseFloat(p.form)||0, ppg = parseFloat(p.points_per_game)||0;
-  return f > 0 ? (0.65*f + 0.35*ppg) : ppg;                // blend form with season rate
+  const realized = f > 0 ? (0.6*f + 0.4*ppg) : ppg;           // what he's actually scored
+  const under = underlyingPPG(p);                             // what the underlying implies
+  return 0.6*realized + 0.4*under;                            // blend: regression-aware
 }
 function nextFixtures(teamId, n){ return (fixturesByTeam[teamId]||[]).slice(0, n); }
 // projected points for the single next gameweek (handles double GWs)
@@ -485,6 +516,13 @@ function statusFlag(p){
   return `<span class="flagok">✓</span>`;
 }
 function fdrPill(diff){ return `<span class="pill fdr${diff}">${diff}</span>`; }
+function tagPills(p){
+  let s="";
+  if(isPenTaker(p)) s+=`<span class="pill fdr1" title="On penalties">PEN</span> `;
+  else if(isSetPiece(p)) s+=`<span class="pill fdr2" title="Set-piece taker">SET</span> `;
+  if(minutesRisk(p)) s+=`<span class="pill fdr4" title="Shaky starting minutes — rotation risk">MINS?</span> `;
+  return s;
+}
 function fixtureStrip(teamId, n){
   return nextFixtures(teamId,n).map(f=>{
     const opp = teamsById[f.opp] ? teamsById[f.opp].short_name : "?";
@@ -560,7 +598,7 @@ function renderSquad(){
     html+=`<div class="squad-pos"><h4>${names[t]}</h4><div class="plist">`;
     g[t].sort((a,b)=>proj5(b)-proj5(a)).forEach(p=>{
       html+=`<div class="prow">
-        <span class="nm">${p.web_name}</span>
+        <span class="nm">${p.web_name} ${tagPills(p)}</span>
         <span class="muted">${teamsById[p.team].short_name} · £${price(p).toFixed(1)}m</span>
         <span>${statusFlag(p)}</span>
         <span title="Projected next 5 GW">P5 <b>${proj5(p).toFixed(1)}</b></span>
@@ -642,6 +680,47 @@ function myLeagueSummary(){
     gapAbove:above?Math.max(0,above.total-me.total):0,
     aboveName:above?above.name:null};
 }
+// rank-dependent posture (playbook: protect when ahead, chase when behind)
+function leaguePosture(){
+  const L=myLeagueSummary();
+  if(!L) return {mode:"balanced", label:"Balanced", reason:"Load your league (Tab 3) to tailor risk to your rank."};
+  const frac=L.pos/L.n;
+  if(L.pos===1 || frac<=0.25)
+    return {mode:"protect", label:"Protect", reason:`You're ${L.pos} of ${L.n} — near the top. Play safe: template captain, minimise variance.`};
+  if(frac>=0.55)
+    return {mode:"chase", label:"Chase", reason:`You're ${L.pos} of ${L.n} — you need ground. Take calculated differentials with real underlying data.`};
+  return {mode:"balanced", label:"Balanced", reason:`You're ${L.pos} of ${L.n} — mid-table. Mostly template, with one pointed differential.`};
+}
+// effective ownership within your league (ownership + captaincy share)
+function leagueEO(elementId){
+  if(!LEAGUE || !LEAGUE.teams) return null;
+  const teams=Object.values(LEAGUE.teams), n=teams.length; if(!n) return null;
+  let own=0, cap=0;
+  teams.forEach(t=>{ if((t.picks||[]).includes(elementId)) own++; if(t.captain===elementId) cap++; });
+  return {own, cap, n, eo:(own+cap)/n};
+}
+// choose captain by posture (playbook EO framework)
+function chooseCaptain(cands, posture){
+  if(!cands.length) return null;
+  const top=cands.slice(0,4).map(p=>({p, proj:projNext(p), eo:(leagueEO(p.id)||{eo:null}).eo}));
+  const P1=top[0];
+  let pick=P1, reason="highest projected this week";
+  const near=top.filter(x=>P1.proj-x.proj<=1.5 && x.eo!=null);
+  if(posture.mode==="protect" && near.length){
+    near.sort((a,b)=>b.eo-a.eo);
+    pick=near[0];
+    reason = pick===P1 ? "your top pick and widely owned — the safe call" : "the most-owned of your strong options — protects your rank";
+  }else if(posture.mode==="chase" && near.length){
+    near.sort((a,b)=>a.eo-b.eo);
+    const diff=near[0];
+    if(diff!==P1 && P1.eo!=null && (P1.eo-diff.eo)>=0.2){
+      pick=diff; reason="a differential captain — few rivals own him, so a haul gains you ground";
+    }
+  }
+  const alt=top.find(x=>x!==pick);
+  return {pick, alt, reason};
+}
+
 // how many rivals own a given player (excluding me)
 function rivalOwnership(elementId){
   if(!LEAGUE || !LEAGUE.teams) return null;
@@ -661,16 +740,21 @@ function renderGameweek(){
   if(!has) return;
   const squad=DB.squad.map(id=>byId[id]).filter(Boolean);
 
-  // CAPTAIN — highest projected next GW among available players
+  // CAPTAIN — posture-aware (playbook EO framework)
   const capRanked=[...squad].filter(p=>availability(p)>0 && projNext(p)>0).sort((a,b)=>projNext(b)-projNext(a));
+  const posture=leaguePosture();
+  const chosenCap=capRanked.length?chooseCaptain(capRanked, posture):null;
   const cHost=document.getElementById("captainRec");
-  if(!capRanked.length){ cHost.innerHTML='<p class="muted">No player in your squad has a fixture this gameweek.</p>'; }
+  if(!chosenCap){ cHost.innerHTML='<p class="muted">No player in your squad has a fixture this gameweek.</p>'; }
   else{
-    const c=capRanked[0], alt=capRanked[1];
+    const c=chosenCap.pick.p, alt=chosenCap.alt?chosenCap.alt.p:null;
+    const eo=leagueEO(c.id);
     const dgw=(fixturesByTeam[c.team]||[]).filter(f=>f.event===TARGET_GW).length>1;
-    cHost.innerHTML=`<div class="rec cap"><b>© ${c.web_name}</b> (${teamsById[c.team].short_name}) — projected ${projNext(c).toFixed(1)} pts this GW${dgw?" · <b>double gameweek!</b>":""}.
-      <div class="muted" style="margin-top:4px">Next fixtures: ${fixtureStrip(c.team,3)}</div>
-      ${alt?`<div class="muted" style="margin-top:6px">Backup: ${alt.web_name} (${projNext(alt).toFixed(1)} pts).</div>`:""}</div>`;
+    cHost.innerHTML=`<div class="rec cap"><span class="pill fdr3">${posture.label} mode</span> <b>© ${c.web_name}</b> (${teamsById[c.team].short_name}) — ${projNext(c).toFixed(1)} pts${dgw?" · <b>double gameweek!</b>":""}. ${chosenCap.reason}.
+      ${eo?`<div class="muted" style="margin-top:4px">League ownership: <b>${eo.own}/${eo.n}</b>${eo.cap?`, captained by ${eo.cap}`:""} (EO ${(eo.eo*100).toFixed(0)}%).</div>`:""}
+      <div class="muted" style="margin-top:4px">${posture.reason}</div>
+      <div class="muted" style="margin-top:4px">Fixtures: ${fixtureStrip(c.team,3)}</div>
+      ${alt?`<div class="muted" style="margin-top:6px">Alternative: ${alt.web_name} (${projNext(alt).toFixed(1)} pts).</div>`:""}</div>`;
   }
 
   // TRANSFERS — weakest 3 starters vs best affordable replacement in same position
@@ -722,11 +806,11 @@ function renderGameweek(){
   // ---- "Your move this week" headline ----
   const move=document.getElementById("weeklyMove");
   const L=myLeagueSummary();
-  const cap=capRanked[0];
+  const cap=chosenCap?chosenCap.pick.p:null;
   let bullets=[];
   if(L){
-    if(L.pos===1) bullets.push(`You're <b>1st of ${L.n}</b> — protect the lead: cover what your chasers own and captain the safe pick.`);
-    else bullets.push(`You're <b>${L.pos}${ord(L.pos)} of ${L.n}</b> — <b>${L.gapAbove}</b> pts behind the place above, <b>${L.gapLeader}</b> off top.`);
+    if(L.pos===1) bullets.push(`You're <b>1st of ${L.n}</b> (<b>${posture.label}</b> mode) — protect the lead: cover what your chasers own and captain the safe pick.`);
+    else bullets.push(`You're <b>${L.pos}${ord(L.pos)} of ${L.n}</b> (<b>${posture.label}</b> mode) — <b>${L.gapAbove}</b> pts behind the place above, <b>${L.gapLeader}</b> off top.`);
   }
   if(cap){
     let note="";
@@ -754,6 +838,8 @@ function renderGameweek(){
     <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:6px;font-weight:700">⚡ Your move this week · GW${TARGET_GW}</div>
     <ul style="margin:0;padding-left:18px">${bullets.map(b=>`<li style="margin:7px 0">${b}</li>`).join("")}</ul>
   </div>`;
+
+  renderChipRoadmap();
 }
 
 // ---------- mini-league battle plan ----------
@@ -900,6 +986,43 @@ function renderPundit(){
     + (lone.length?lone.map(x=>row(x,"buy")).join(""):'<p class="muted">No standout single-voice picks.</p>');
 }
 
+// ---------- season chip roadmap (playbook §1) ----------
+function scanEvents(){
+  // count fixtures per team per event to detect future doubles/blanks
+  const ev={};
+  (FIXTURES||[]).forEach(f=>{
+    if(f.event==null) return;
+    const e=ev[f.event]||(ev[f.event]={matches:0, count:{}});
+    e.matches++; e.count[f.team_h]=(e.count[f.team_h]||0)+1; e.count[f.team_a]=(e.count[f.team_a]||0)+1;
+  });
+  const doubles=[], blanks=[];
+  Object.keys(ev).map(Number).sort((a,b)=>a-b).forEach(id=>{
+    if(id<TARGET_GW) return;
+    const e=ev[id];
+    const dgwTeams=Object.values(e.count).filter(c=>c>=2).length;
+    if(dgwTeams>0) doubles.push({gw:id, teams:dgwTeams});
+    else if(e.matches>0 && e.matches<10) blanks.push({gw:id, matches:e.matches});
+  });
+  return {doubles, blanks};
+}
+function renderChipRoadmap(){
+  const host=document.getElementById("chipRoadmap"); if(!host) return;
+  if(!FIXTURES || TARGET_GW==null){ host.innerHTML='<p class="muted">Load data to see your chip plan.</p>'; return; }
+  const {doubles, blanks}=scanEvents();
+  let out=[];
+  if(TARGET_GW<=19){
+    const left=19-TARGET_GW;
+    out.push(`<div class="rec ${left<=4?'sell':''}"><b>First-half chips expire at GW19</b> — ${left} gameweek${left===1?'':'s'} left. Unused Wildcard/Free Hit/Triple Captain/Bench Boost are <b>lost</b>, not carried over. Don't let them rot.</div>`);
+    out.push(`<div class="rec"><b>Low-regret first-half plays:</b> Triple Captain a premium at home to a promoted side (Haaland's GW3/7/16 home games are the classic windows), and Bench Boost only if all 15 are nailed starters.</div>`);
+  }else{
+    out.push(`<div class="rec buy"><b>Second-half chips (GW20–38) — the rank-winning window.</b> Hold Triple Captain, Bench Boost and Free Hit for the double/blank cluster that historically lands Feb–May.</div>`);
+  }
+  if(doubles.length) out.push(`<div class="rec cap"><b>Doubles ahead:</b> ${doubles.slice(0,4).map(d=>`GW${d.gw} (${d.teams} teams)`).join(", ")}. Target Bench Boost / Triple Captain here.</div>`);
+  if(blanks.length) out.push(`<div class="rec sell"><b>Blanks ahead:</b> ${blanks.slice(0,4).map(b=>`GW${b.gw} (${b.matches} matches)`).join(", ")}. A Free Hit fields a full team through the biggest one.</div>`);
+  if(!doubles.length && !blanks.length) out.push(`<div class="rec"><span class="muted">No doubles or blanks are confirmed in the fixtures yet — normal for now. They depend on cup draws and get scheduled 2–4 weeks out, so re-check from January.</span></div>`);
+  host.innerHTML=out.join("");
+}
+
 // ---------- explorer ----------
 function renderExplorer(){
   if(!BOOT){ return; }
@@ -919,7 +1042,7 @@ function renderExplorer(){
   thead.innerHTML=`<tr><th>Player</th><th>Team</th><th>Pos</th><th>£m</th><th>Own%</th><th>Form</th>
     <th>Proj GW</th><th>Proj 5GW</th><th>Val</th><th>Next 3</th><th></th></tr>`;
   document.querySelector("#exTable tbody").innerHTML=rows.map(p=>`<tr>
-    <td><b>${p.web_name}</b></td><td>${teamsById[p.team].short_name}</td><td>${posName(p.element_type)}</td>
+    <td><b>${p.web_name}</b> ${tagPills(p)}</td><td>${teamsById[p.team].short_name}</td><td>${posName(p.element_type)}</td>
     <td>${price(p).toFixed(1)}</td><td>${p.selected_by_percent}</td><td>${p.form}</td>
     <td>${projNext(p).toFixed(1)}</td><td><b>${proj5(p).toFixed(1)}</b></td><td>${value5(p).toFixed(1)}</td>
     <td>${fixtureStrip(p.team,3)}</td>
