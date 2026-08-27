@@ -23,6 +23,7 @@ ENTRY_ID = "2537434"     # your FPL team id
 LEAGUE_ID = "52140"      # your classic mini-league id
 
 API = "https://fantasy.premierleague.com/api"
+SOLIO_URL = "https://fpl.solioanalytics.com/api/data/latest"  # public projections feed
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -34,6 +35,20 @@ HEADERS = {
 def get(path, tries=4):
     """GET a JSON endpoint with a few retries."""
     url = API + path
+    last = None
+    for attempt in range(tries):
+        try:
+            req = urllib.request.Request(url, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:  # noqa: BLE001
+            last = e
+            time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"Failed to fetch {url}: {last}")
+
+
+def get_url(url, tries=3):
+    """GET any absolute URL, returning parsed JSON."""
     last = None
     for attempt in range(tries):
         try:
@@ -137,8 +152,18 @@ def main():
     except Exception as e:  # noqa: BLE001
         print(f"  league fetch failed: {e}")
 
+    print("Fetching Solio Analytics projections…")
+    solio_ok = False
+    try:
+        solio = get_url(SOLIO_URL)
+        write("solio.json", solio)
+        solio_ok = True
+    except Exception as e:  # noqa: BLE001
+        print(f"  solio fetch failed: {e}")
+
     meta = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "solio": solio_ok,
         "entry": ENTRY_ID,
         "league": LEAGUE_ID,
         "current_gw": (cur or {}).get("id"),
