@@ -140,6 +140,9 @@
       <p class="sub">A read on your squad's strengths and weaknesses right now.</p>
       <div class="cards" id="assessCards"></div>
       <div id="assessNotes"></div>
+      <h3>Correlation &amp; risk</h3>
+      <p class="sub">Covariance = players whose points move together (usually same-club). Concentrated squads have a bigger ceiling but a harder floor. This reads that in light of your Protect/Chase posture.</p>
+      <div id="riskView"></div>
       <h3>Your squad</h3>
       <div id="squadView"></div>
     </div>
@@ -651,12 +654,46 @@ function renderAssessment(){
   }
   if(avgFdr && avgFdr<=2.6) notes.push(`<div class="rec buy"><b>Good fixtures ahead.</b> Your squad's average difficulty over the next 3 games is ${avgFdr.toFixed(2)} — favourable. Hold and back your players.</div>`);
   else if(avgFdr>=3.3) notes.push(`<div class="rec sell"><b>Tough run.</b> Average difficulty ${avgFdr.toFixed(2)} — consider moving players with the hardest fixtures (see Tab 2).</div>`);
-  if(heavy.length) notes.push(`<div class="rec"><b>Club concentration:</b> ${heavy.join(", ")}. Fine when they're flying, but a blank from that club hits you hard.</div>`);
+  // (club concentration is covered in detail by the Correlation & risk section below)
   // bench strength: weakest 4 by proj5
   const bench=[...squad].sort((a,b)=>proj5(a)-proj5(b)).slice(0,4);
   const benchP5=bench.reduce((s,p)=>s+proj5(p),0);
   if(benchP5<8) notes.push(`<div class="rec"><b>Thin bench.</b> Your four weakest players project just ${benchP5.toFixed(1)} pts over 5 GW — a Bench Boost wouldn't pay off yet.</div>`);
   document.getElementById("assessNotes").innerHTML=notes.join("");
+  renderCorrelation();
+}
+// ---------- covariance / correlation & risk (practical read) ----------
+function renderCorrelation(){
+  const host=document.getElementById("riskView"); if(!host) return;
+  const squad=DB.squad.map(id=>byId[id]).filter(Boolean);
+  if(!squad.length){ host.innerHTML=""; return; }
+  const n=squad.length, byTeam={};
+  squad.forEach(p=>{ (byTeam[p.team]=byTeam[p.team]||[]).push(p); });
+  let hhi=0; Object.values(byTeam).forEach(a=>{ const f=a.length/n; hhi+=f*f; });  // concentration
+  const level = hhi>=0.16 ? "spiky" : hhi>=0.12 ? "balanced" : "steady";
+  const stacks=Object.entries(byTeam).filter(([,a])=>a.length>=3).map(([t,a])=>({t:+t,a}))
+    .sort((x,y)=>y.a.length-x.a.length);
+  const csStacks=Object.entries(byTeam).map(([t,a])=>({t:+t,a}))
+    .filter(x=>x.a.some(p=>p.element_type===1) && x.a.some(p=>p.element_type===2));
+  const posture=leaguePosture();
+  const desc={steady:"steady — well spread, low week-to-week swing",
+    balanced:"balanced — a normal mix of safety and upside",
+    spiky:"spiky — concentrated, so a big ceiling but a rough team-week hurts"};
+  let out=[`<div class="rec ${level==='spiky'?'sell':level==='steady'?'buy':''}"><b>Squad risk: ${level}.</b> ${desc[level]}.</div>`];
+  if(!stacks.length && !csStacks.length)
+    out.push(`<div class="rec buy"><span class="muted">No heavy stacks — no single club dominates your fate.</span></div>`);
+  stacks.forEach(s=>out.push(`<div class="rec"><b>${teamsById[s.t].short_name} stack (${s.a.length}):</b> ${s.a.map(p=>p.web_name).join(", ")}. Their points move together — great on a big team-week, painful on a blank.</div>`));
+  csStacks.forEach(s=>{
+    const back=s.a.filter(p=>p.element_type<=2).map(p=>p.web_name);
+    if(back.length>=2) out.push(`<div class="rec cap"><b>Clean-sheet stack — ${teamsById[s.t].short_name}:</b> ${back.join(" + ")}. A clean sheet pays them all at once (double upside, double downside).</div>`);
+  });
+  if(posture.mode==="protect" && level==="spiky")
+    out.push(`<div class="rec sell"><b>Posture check:</b> you're in <b>Protect</b> mode but the squad is spiky — consider <b>diversifying</b> a stack to steady your floor and keep your lead safe.</div>`);
+  else if(posture.mode==="chase" && level==="steady")
+    out.push(`<div class="rec buy"><b>Posture check:</b> you're <b>Chasing</b> but the squad is steady — a deliberate <b>stack</b> (a strong side's defence + attacker) would raise your ceiling to make up ground.</div>`);
+  else
+    out.push(`<div class="rec"><span class="muted"><b>Posture check:</b> a ${level} risk level fits ${posture.label} mode reasonably.</span></div>`);
+  host.innerHTML=out.join("");
 }
 function statusText(p){
   if(["i","s","u"].includes(p.status)) return p.status==="s"?"suspended":"out";
