@@ -151,6 +151,7 @@
       <p class="sub">Everything below is scored from live <b>form × fixture difficulty × chance of playing</b>. Load your team first (Tab 1).</p>
       <div id="gwEmpty" class="status info show">Load your team in Tab 1 to get captain, transfer and chip advice.</div>
       <div id="gwContent" style="display:none">
+        <div id="weeklyMove"></div>
         <h3>Captain</h3>
         <div id="captainRec"></div>
         <h3>Transfer ideas</h3>
@@ -559,6 +560,33 @@ function statusText(p){
   return "ok";
 }
 
+// ---------- small helpers ----------
+function ord(n){ const a=n%10,b=n%100; return (a===1&&b!==11)?"st":(a===2&&b!==12)?"nd":(a===3&&b!==13)?"rd":"th"; }
+function stripTags(s){ return String(s).replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim(); }
+function myLeagueSummary(){
+  if(!LEAGUE || !LEAGUE.teams) return null;
+  const meId=String(LEAGUE.me||BAKED_ID);
+  const entries=Object.entries(LEAGUE.teams).map(([eid,t])=>({eid:String(eid),...t}))
+    .sort((a,b)=>(b.total||0)-(a.total||0)||(a.rank||999)-(b.rank||999));
+  const pos=entries.findIndex(e=>e.eid===meId);
+  if(pos<0) return null;
+  const me=entries[pos], leader=entries[0], above=pos>0?entries[pos-1]:null;
+  return {pos:pos+1, n:entries.length, total:me.total,
+    gapLeader:Math.max(0,leader.total-me.total),
+    gapAbove:above?Math.max(0,above.total-me.total):0,
+    aboveName:above?above.name:null};
+}
+// how many rivals own a given player (excluding me)
+function rivalOwnership(elementId){
+  if(!LEAGUE || !LEAGUE.teams) return null;
+  const meId=String(LEAGUE.me||BAKED_ID); let own=0,tot=0;
+  Object.entries(LEAGUE.teams).forEach(([eid,t])=>{
+    if(String(eid)===meId) return; tot++;
+    if((t.picks||[]).includes(elementId)) own++;
+  });
+  return tot?{own,tot}:null;
+}
+
 // ---------- gameweek recommendations ----------
 function renderGameweek(){
   const has=DB.squad.length && BOOT;
@@ -583,7 +611,7 @@ function renderGameweek(){
   const starters=[...squad].sort((a,b)=>proj5(b)-proj5(a));
   const weak=[...squad].sort((a,b)=> (availability(a)-availability(b)) || (proj5(a)-proj5(b))).slice(0,3);
   const owned=new Set(DB.squad.map(Number));
-  const tHost=document.getElementById("transferRec"); let th="";
+  const tHost=document.getElementById("transferRec"); let th=""; let best=null;
   weak.forEach(out=>{
     const budget=(DB.bank||0)+price(out);
     const cand=BOOT.elements.filter(p=>p.element_type===out.element_type && !owned.has(p.id)
@@ -592,6 +620,7 @@ function renderGameweek(){
     if(!cand) return;
     const gain=proj5(cand)-proj5(out);
     const worth = gain>=5;
+    if(gain>0 && (!best || gain>best.gain)) best={out,cand,gain,worth};
     th+=`<div class="rec ${gain>0?'buy':''}">
       <b>OUT ${out.web_name}</b> (${proj5(out).toFixed(1)} P5${availability(out)<1?", "+statusText(out):""})
       → <b>IN ${cand.web_name}</b> (${teamsById[cand.team].short_name}, £${price(cand).toFixed(1)}m, ${proj5(cand).toFixed(1)} P5)
@@ -620,8 +649,40 @@ function renderGameweek(){
   const needWork=squad.filter(p=>availability(p)===0).length + weak.filter(p=>proj5(p)<4).length;
   if(needWork>=4 && !chipUsed("wildcard"))
     ch.push(`<div class="rec"><b>Wildcard on the radar.</b> Several players are injured or out of form. If free transfers can't fix it in 1–2 weeks, a Wildcard resets the squad without hits.</div>`);
+  const hadChip = ch.length>0;
   if(!ch.length) ch.push(`<p class="muted">No chip is signalled for GW${TARGET_GW}. Hold your chips for double/blank gameweeks and big fixture swings.</p>`);
   chipHost.innerHTML=ch.join("");
+
+  // ---- "Your move this week" headline ----
+  const move=document.getElementById("weeklyMove");
+  const L=myLeagueSummary();
+  const cap=capRanked[0];
+  let bullets=[];
+  if(L){
+    if(L.pos===1) bullets.push(`You're <b>1st of ${L.n}</b> — protect the lead: cover what your chasers own and captain the safe pick.`);
+    else bullets.push(`You're <b>${L.pos}${ord(L.pos)} of ${L.n}</b> — <b>${L.gapAbove}</b> pts behind the place above, <b>${L.gapLeader}</b> off top.`);
+  }
+  if(cap){
+    let note="";
+    const ro=rivalOwnership(cap.id);
+    if(ro) note = ro.own>=ro.tot/2 ? ` — ${ro.own}/${ro.tot} rivals have him too, so it's the safe call`
+                                    : ` — only ${ro.own}/${ro.tot} rivals own him, a bold differential captain`;
+    bullets.push(`Captain <b>${cap.web_name}</b> (${projNext(cap).toFixed(1)} proj pts)${note}.`);
+  }
+  if(best && best.gain>0){
+    const verdict = DB.ft>0 ? "you have a free transfer, so no hit" : (best.worth?"worth the −4 hit":"<b>not</b> worth a −4 — bank it");
+    const ro=rivalOwnership(best.cand.id);
+    const edge = ro && ro.own<=ro.tot*0.3 ? ` (a differential — only ${ro.own}/${ro.tot} rivals own him)` : "";
+    bullets.push(`Transfer: <b>${best.out.web_name} → ${best.cand.web_name}</b>, +${best.gain.toFixed(1)} over 5 GW${edge}; ${verdict}.`);
+  }else{
+    bullets.push(`No upgrade beats your squad within budget — <b>roll your free transfer</b> and bank it.`);
+  }
+  bullets.push(hadChip ? `Chip: ${stripTags(ch[0])}` : `Chips: nothing signalled — hold them for double/blank gameweeks.`);
+
+  move.innerHTML=`<div class="rec cap" style="border-left-width:6px;background:linear-gradient(100deg,rgba(0,255,135,.10),transparent)">
+    <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:6px;font-weight:700">⚡ Your move this week · GW${TARGET_GW}</div>
+    <ul style="margin:0;padding-left:18px">${bullets.map(b=>`<li style="margin:7px 0">${b}</li>`).join("")}</ul>
+  </div>`;
 }
 
 // ---------- mini-league battle plan ----------
