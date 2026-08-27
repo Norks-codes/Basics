@@ -103,9 +103,10 @@
   <nav class="tabs">
     <button data-tab="team" class="active">1 · My Team</button>
     <button data-tab="gw">2 · This Gameweek</button>
-    <button data-tab="explorer">3 · Find Players</button>
-    <button data-tab="log">4 · Season Log</button>
-    <button data-tab="win">5 · How to Win</button>
+    <button data-tab="league">3 · My League</button>
+    <button data-tab="explorer">4 · Find Players</button>
+    <button data-tab="log">5 · Season Log</button>
+    <button data-tab="win">6 · How to Win</button>
   </nav>
 
   <!-- ============ TAB 1: MY TEAM ============ -->
@@ -157,6 +158,28 @@
         <div id="transferRec"></div>
         <h3>Chip watch</h3>
         <div id="chipRec"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: MY LEAGUE ============ -->
+  <section id="tab-league" style="display:none">
+    <div class="panel">
+      <h2>Your mini-league <span class="muted" id="leagueName"></span></h2>
+      <p class="sub">Winning a mini-league is about beating <b>these</b> people — not the whole world. This is your battle plan against them.</p>
+      <div id="leagueStatus" class="status info show">Loading your rivals…</div>
+      <div id="leagueBody" style="display:none">
+        <div class="cards" id="leagueCards"></div>
+        <h3>Standings</h3>
+        <div class="scroll"><table id="leagueTable"><thead></thead><tbody></tbody></table></div>
+        <h3>Threats — players your rivals own that you don't</h3>
+        <p class="sub">Sorted by how many rivals own them and their projected points. These are the players quietly winning your rivals points you're not getting.</p>
+        <div id="leagueThreats"></div>
+        <h3>Your differentials — what you have that they don't</h3>
+        <p class="sub">Good players you own that few rivals do. When these deliver, you climb.</p>
+        <div id="leagueDiffs"></div>
+        <h3>What your rivals are captaining</h3>
+        <div id="leagueCaptains"></div>
       </div>
     </div>
   </section>
@@ -272,6 +295,7 @@ const STORE_KEY = "fplEdge.v1";
 let DB = load();                 // persisted state
 let BOOT = null;                 // bootstrap-static
 let FIXTURES = null;             // fixtures
+let LEAGUE = null;               // mini-league scouting (rival squads)
 let byId = {};                   // player id -> element
 let teamsById = {};              // team id -> team
 let fixturesByTeam = {};         // team id -> [{event,diff,home,opp}]
@@ -350,6 +374,8 @@ async function loadCore(){
     fixturesByTeam[f.team_a].push({event:f.event, diff:f.team_a_difficulty, home:false, opp:f.team_h});
   });
   Object.values(fixturesByTeam).forEach(a => a.sort((x,y)=>x.event-y.event));
+  // mini-league scouting (bundled only — rival squads can't be fetched live)
+  try{ LEAGUE = await loadLocal("league-picks.json"); }catch(e){ LEAGUE = null; }
   globalMsg("Live data loaded ✓  Next gameweek: GW"+TARGET_GW, "ok", 4000);
   document.getElementById("gwTitle").textContent = "GW" + TARGET_GW;
 }
@@ -450,7 +476,7 @@ async function loadTeamById(){
 // ============================================================
 //  RENDERING
 // ============================================================
-function renderAll(){ renderSquad(); renderAssessment(); renderGameweek(); renderLog(); renderChips(); }
+function renderAll(){ renderSquad(); renderAssessment(); renderGameweek(); renderLeague(); renderLog(); renderChips(); }
 
 function squadByPos(){
   const g={1:[],2:[],3:[],4:[]};
@@ -598,6 +624,78 @@ function renderGameweek(){
   chipHost.innerHTML=ch.join("");
 }
 
+// ---------- mini-league battle plan ----------
+function renderLeague(){
+  const status=document.getElementById("leagueStatus");
+  const body=document.getElementById("leagueBody");
+  if(!BOOT){ status.className="status info show"; status.textContent="Loading data…"; body.style.display="none"; return; }
+  if(!LEAGUE || !LEAGUE.teams || !Object.keys(LEAGUE.teams).length){
+    status.className="status info show";
+    status.textContent="Rival data isn't ready yet. Run the ‘Update FPL data’ action once (Actions tab → Run workflow), wait a minute, then refresh.";
+    body.style.display="none"; return;
+  }
+  status.classList.remove("show"); body.style.display="block";
+  document.getElementById("leagueName").textContent = LEAGUE.league_name?("· "+LEAGUE.league_name):"";
+
+  const meId=String(LEAGUE.me||BAKED_ID);
+  const entries=Object.entries(LEAGUE.teams).map(([eid,t])=>({eid:String(eid),...t}));
+  entries.sort((a,b)=>(b.total||0)-(a.total||0) || (a.rank||999)-(b.rank||999));
+  entries.forEach((e,i)=>e.pos=i+1);
+  const me=entries.find(e=>e.eid===meId);
+  const leader=entries[0];
+  const rivals=entries.filter(e=>e.eid!==meId);
+  const nRivals=rivals.length, denom=Math.max(1,nRivals);
+
+  const mySquad=(DB.squad && DB.squad.length)?DB.squad.map(Number):(me&&me.picks?me.picks.map(Number):[]);
+  const mySet=new Set(mySquad);
+
+  const owners={}, capCount={};
+  rivals.forEach(r=>{
+    (r.picks||[]).forEach(id=>owners[id]=(owners[id]||0)+1);
+    if(r.captain) capCount[r.captain]=(capCount[r.captain]||0)+1;
+  });
+
+  const gapLeader=me?(leader.total-me.total):0;
+  const above=(me&&me.pos>1)?entries[me.pos-2]:null;
+  const gapAbove=(me&&above)?(above.total-me.total):0;
+  const cards=[
+    ["Your position", me?me.pos+" of "+entries.length:"—"],
+    ["Gap to 1st", me?((gapLeader>0?"-"+gapLeader:"leading!"))+(gapLeader>0?" pts":""):"—"],
+    ["Gap to place above", above?("-"+gapAbove+" pts"):(me&&me.pos===1?"top spot":"—")],
+    ["Rivals scouted", String(nRivals)],
+  ];
+  document.getElementById("leagueCards").innerHTML=cards.map(c=>`<div class="card"><div class="lbl">${c[0]}</div><div class="big" style="font-size:22px">${c[1]}</div></div>`).join("");
+
+  document.querySelector("#leagueTable thead").innerHTML=`<tr><th>#</th><th>Team</th><th>Manager</th><th>GW</th><th>Total</th><th>vs You</th></tr>`;
+  document.querySelector("#leagueTable tbody").innerHTML=entries.map(e=>{
+    const diff=me?e.total-me.total:0;
+    const vs=e.eid===meId?"<b>—</b>":(diff>0?"+"+diff:String(diff));
+    return `<tr style="${e.eid===meId?'background:rgba(11,114,133,.12)':''}">
+      <td>${e.pos}</td><td><b>${e.name||"?"}</b>${e.eid===meId?' <span class="pill fdr1">YOU</span>':''}</td>
+      <td class="muted">${e.manager||""}</td><td>${e.event_total??"—"}</td><td><b>${e.total??"—"}</b></td><td>${vs}</td></tr>`;
+  }).join("");
+
+  const threats=Object.keys(owners).map(Number).filter(id=>!mySet.has(id)&&byId[id])
+    .map(id=>({p:byId[id],n:owners[id]})).sort((a,b)=>b.n-a.n||proj5(b.p)-proj5(a.p)).slice(0,8);
+  document.getElementById("leagueThreats").innerHTML=threats.length?threats.map(t=>{
+    const p=t.p,pct=Math.round(100*t.n/denom),cap=capCount[p.id]?` · <b>${capCount[p.id]}</b> captaining him`:"";
+    return `<div class="rec ${t.n>=nRivals/2?'sell':''}"><b>${p.web_name}</b> (${teamsById[p.team].short_name}, £${price(p).toFixed(1)}m) — <b>${t.n}/${nRivals}</b> rivals own him (${pct}%)${cap}.
+      <div class="muted" style="margin-top:4px">Proj next 5 GW: <b>${proj5(p).toFixed(1)}</b> · ${fixtureStrip(p.team,3)}</div></div>`;
+  }).join(""):'<p class="muted">You already own the popular picks — no glaring gaps.</p>';
+
+  const diffs=mySquad.filter(id=>byId[id]).map(id=>({p:byId[id],n:owners[id]||0}))
+    .filter(t=>t.n<=Math.max(1,Math.floor(nRivals*0.3))).sort((a,b)=>proj5(b.p)-proj5(a.p)).slice(0,6);
+  document.getElementById("leagueDiffs").innerHTML=diffs.length?diffs.map(t=>{
+    const p=t.p,pct=Math.round(100*t.n/denom);
+    return `<div class="rec buy"><b>${p.web_name}</b> (${teamsById[p.team].short_name}) — only <b>${t.n}/${nRivals}</b> rivals own him (${pct}%). Proj 5GW: <b>${proj5(p).toFixed(1)}</b>. ${proj5(p)>=15?'A real edge if he delivers.':'Watch the returns.'}</div>`;
+  }).join(""):'<p class="muted">Your squad closely mirrors your rivals — a differential (Find Players tab) could separate you.</p>';
+
+  const caps=Object.keys(capCount).map(Number).filter(id=>byId[id]).map(id=>({p:byId[id],n:capCount[id]})).sort((a,b)=>b.n-a.n);
+  document.getElementById("leagueCaptains").innerHTML=caps.length?caps.map(c=>
+    `<div class="rec cap"><b>${c.p.web_name}</b> — captained by <b>${c.n}/${nRivals}</b> rivals. ${!mySet.has(c.p.id)?"You don't own him — if he hauls, they all pull away from you.":(c.n>=nRivals/2?"You own him too — captaining him keeps pace.":"")}</div>`
+  ).join(""):'<p class="muted">No rival captain data for this gameweek yet.</p>';
+}
+
 // ---------- explorer ----------
 function renderExplorer(){
   if(!BOOT){ return; }
@@ -693,10 +791,11 @@ function logMsg(msg,kind){
 }
 function switchTab(name){
   document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
-  ["team","gw","explorer","log","win"].forEach(t=>{
+  ["team","gw","league","explorer","log","win"].forEach(t=>{
     document.getElementById("tab-"+t).style.display = (t===name)?"block":"none";
   });
   if(name==="explorer" && BOOT) renderExplorer();
+  if(name==="league") renderLeague();
 }
 
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
@@ -735,7 +834,7 @@ document.getElementById("wipeBtn").onclick=()=>{
   try{
     await loadCore();
     if(DB.squad && DB.squad.length){ renderAll(); }
-    else renderChips();
+    else { renderChips(); renderLeague(); }
   }catch(e){
     globalMsg("FPL data isn't ready yet. If you just set this up, run the ‘Update FPL data’ action once (Actions tab → Run workflow), wait a minute, then refresh.","err");
     renderChips();

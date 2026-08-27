@@ -101,6 +101,39 @@ def main():
     try:
         league = get(f"/leagues-classic/{LEAGUE_ID}/standings/")
         write(f"league-{LEAGUE_ID}.json", league)
+
+        # Scout each rival: pull their squad + captain for the same gameweek.
+        results = (league.get("standings") or {}).get("results", [])
+        teams = {}
+        for r in results[:60]:
+            eid = r.get("entry")
+            if eid is None:
+                continue
+            team = {
+                "name": r.get("entry_name"),
+                "manager": r.get("player_name"),
+                "rank": r.get("rank"),
+                "total": r.get("total"),
+                "event_total": r.get("event_total"),
+            }
+            if used_gw:
+                try:
+                    p = get(f"/entry/{eid}/event/{used_gw}/picks/")
+                    plist = p.get("picks", [])
+                    team["picks"] = [x["element"] for x in plist]
+                    team["captain"] = next(
+                        (x["element"] for x in plist if x.get("is_captain")), None)
+                except Exception:  # noqa: BLE001
+                    team["picks"] = []
+            teams[str(eid)] = team
+        write("league-picks.json", {
+            "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "gw": used_gw,
+            "league_name": (league.get("league") or {}).get("name"),
+            "me": ENTRY_ID,
+            "teams": teams,
+        })
+        print(f"  scouted {len(teams)} rival squads")
     except Exception as e:  # noqa: BLE001
         print(f"  league fetch failed: {e}")
 
