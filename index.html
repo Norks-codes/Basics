@@ -158,6 +158,8 @@
         <div id="weeklyMove"></div>
         <h3>Captain</h3>
         <div id="captainRec"></div>
+        <details id="capDeepWrap" style="display:none"><summary>See the full captaincy case — opponent, underlying, role, ceiling vs floor</summary><div id="captainDeep"></div></details>
+        <div id="convictionBox"></div>
         <h3>Transfer ideas</h3>
         <p class="sub">We compare your weakest starters against the best players you can afford. A transfer is only worth a <b>−4 hit</b> if the projected gain over the next 5 GWs clears ~5 pts.</p>
         <div id="transferRec"></div>
@@ -386,6 +388,7 @@ function ensure(){
   DB.teamId = DB.teamId || "";
   DB.teamName = DB.teamName || "";
   DB.pundit = DB.pundit || "";
+  DB.capLog = DB.capLog || [];       // conviction journal: [{gw, why}]
 }
 ensure();
 
@@ -769,6 +772,74 @@ function rivalOwnership(elementId){
   return tot?{own,tot}:null;
 }
 
+// ---------- captaincy deep-dive (the conviction check) ----------
+function captainFactors(p){
+  const t=p.element_type;
+  const fixs=(fixturesByTeam[p.team]||[]).filter(f=>f.event===TARGET_GW);
+  const f=fixs[0];
+  const out=[];
+  if(f){
+    const opp=teamsById[f.opp]?teamsById[f.opp].short_name:"?";
+    const r=f.diff<=2?"good":f.diff===3?"ok":"bad";
+    out.push({label:"Opponent & fixture", rating:r,
+      text:`${opp} ${f.home?"(H)":"(A)"}, difficulty ${f.diff}${fixs.length>1?` — double gameweek (${fixs.length} games)`:""}. ${f.diff<=2?"A soft matchup to attack.":f.diff===3?"A neutral matchup.":"A tough matchup — needs real quality to break down."}`});
+  }else{
+    out.push({label:"Opponent & fixture", rating:"bad", text:"No fixture this gameweek — he blanks."});
+  }
+  const xgi=p90(p,"expected_goal_involvements_per_90"), xg=p90(p,"expected_goals_per_90"), xa=p90(p,"expected_assists_per_90");
+  out.push({label:"Underlying threat", rating:xgi>=0.6?"good":xgi>=0.3?"ok":"bad",
+    text:`xG ${xg.toFixed(2)}, xA ${xa.toFixed(2)} per 90 (form ${p.form}). ${xgi>=0.6?"Creating big chances — the numbers back him.":xgi>=0.3?"Moderate underlying output.":"Light underlying so far (small early-season sample)."}`});
+  const sr=startRate(p);
+  const extras=[isPenTaker(p)?"on penalties":null, isSetPiece(p)?"set-piece taker":null].filter(Boolean);
+  out.push({label:"Role & minutes", rating:sr>=0.85?"good":sr>=0.6?"ok":"bad",
+    text:`${sr>=0.85?"Nailed starter":sr>=0.6?"Usually starts":"Rotation risk"}${extras.length?" · "+extras.join(", "):""}.${p.news?" News: "+p.news:""}`});
+  const ceilingHigh = xgi>=0.6 || isPenTaker(p) || t===4;
+  const floorSolid = sr>=0.85 && (t<=2 || (parseFloat(p.points_per_game)||0)>=4);
+  out.push({label:"Ceiling vs floor", rating:ceilingHigh?"good":floorSolid?"ok":"bad",
+    text:`${ceilingHigh?"High ceiling — real hauls are in his range":"Modest ceiling"}; ${floorSolid?"solid floor (reliable minutes/returns)":"floor depends on him returning"}. ${ceilingHigh?"Strong captain material for a big score.":"More steady than explosive."}`});
+  return out;
+}
+function renderCaptainDeepDive(cands){
+  const host=document.getElementById("captainDeep"); if(!host) return;
+  const top=cands.slice(0,3);
+  host.innerHTML=top.map((p,i)=>{
+    const fs=captainFactors(p);
+    const green=fs.filter(x=>x.rating==="good").length;
+    const conviction=green>=3?"High":green>=2?"Medium":"Low";
+    const rows=fs.map(x=>{
+      const ic=x.rating==="good"?'<span class="flagok">✅</span>':x.rating==="ok"?'<span class="flagwarn">⚠️</span>':'<span class="flagbad">❌</span>';
+      return `<div style="margin:6px 0"><b>${ic} ${x.label}:</b> <span class="muted">${x.text}</span></div>`;
+    }).join("");
+    const eo=leagueEO(p.id);
+    return `<div class="panel" style="box-shadow:none;margin:10px 0">
+      <h4 style="margin:0 0 6px">${i===0?"Top choice":"Option "+(i+1)}: ${p.web_name}
+        <span class="muted">· ${teamsById[p.team].short_name} · ${projNext(p).toFixed(1)} proj · conviction <b>${conviction}</b></span></h4>
+      ${rows}
+      ${eo?`<div style="margin-top:6px" class="muted">League ownership ${eo.own}/${eo.n} (EO ${(eo.eo*100).toFixed(0)}%).</div>`:""}
+    </div>`;
+  }).join("");
+}
+function renderConviction(){
+  const box=document.getElementById("convictionBox"); if(!box) return;
+  const cur=(DB.capLog||[]).find(x=>x.gw===TARGET_GW);
+  const recent=[...(DB.capLog||[])].sort((a,b)=>b.gw-a.gw).slice(0,6);
+  const esc=s=>String(s).replace(/</g,"&lt;");
+  box.innerHTML=`<details><summary>Conviction journal — write your case, judge process not outcome</summary>
+    <p class="sub">The golden rule: a captain call is judged by your reasoning at the time, not the result. Write your case; if he blanks, you'll see you did your job.</p>
+    <label>GW${TARGET_GW||"?"} — who you're captaining and why</label>
+    <textarea id="convText" rows="3" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit" placeholder="e.g. Captaining Haaland — home to a promoted side, on pens, nailed 90, highest ceiling. Even if he blanks I backed the process.">${cur?esc(cur.why):""}</textarea>
+    <div class="btnrow"><button class="btn" id="convSave">Save my conviction</button></div>
+    ${recent.length?"<h4>Past calls</h4>"+recent.map(r=>`<div class="rec"><b>GW${r.gw}:</b> ${esc(r.why)}</div>`).join(""):""}
+  </details>`;
+  const btn=document.getElementById("convSave");
+  if(btn) btn.onclick=()=>{
+    const why=document.getElementById("convText").value.trim();
+    DB.capLog=(DB.capLog||[]).filter(x=>x.gw!==TARGET_GW);
+    if(why) DB.capLog.push({gw:TARGET_GW, why});
+    save(); renderConviction();
+  };
+}
+
 // ---------- gameweek recommendations ----------
 function renderGameweek(){
   const has=DB.squad.length && BOOT;
@@ -793,6 +864,9 @@ function renderGameweek(){
       <div class="muted" style="margin-top:4px">Fixtures: ${fixtureStrip(c.team,3)}</div>
       ${alt?`<div class="muted" style="margin-top:6px">Alternative: ${alt.web_name} (${projNext(alt).toFixed(1)} pts).</div>`:""}</div>`;
   }
+  document.getElementById("capDeepWrap").style.display = chosenCap ? "block" : "none";
+  if(chosenCap) renderCaptainDeepDive(capRanked);
+  renderConviction();
 
   // TRANSFERS — weakest 3 starters vs best affordable replacement in same position
   const starters=[...squad].sort((a,b)=>proj5(b)-proj5(a));
