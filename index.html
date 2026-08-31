@@ -318,7 +318,7 @@
 
       <h3>5 · Turning that into advice</h3>
       <ul class="strat">
-        <li><b>Captain</b> = your available player with the highest <i>next-gameweek</i> projection.</li>
+        <li><b>Captain</b> = your available player with the highest <i>next-gameweek</i> projection. Early in the season we down-weight raw "form" (one game is noise) and lean on the underlying numbers, and we <b>anchor the captaincy projection to Solio</b> when it covers the player — so the armband follows the sharpest available model, not last week's haul.</li>
         <li><b>Transfers</b> = your weakest projected starters vs the best player you can afford in the same position. A move is only flagged "worth a −4 hit" if it gains ~5+ points over 5 gameweeks.</li>
         <li><b>Mini-league</b> = the above, then cross-checked against what your rivals own (threats, differentials, safe vs bold captain).</li>
       </ul>
@@ -489,11 +489,15 @@ function underlyingPPG(p){
   pts += 2;                                                    // appearance (60+ mins)
   return pts * startRate(p);
 }
+function gamesPlayed(p){ return Math.max(0, (parseFloat(p.minutes)||0)/90); }
 function baseForm(p){
   const f = parseFloat(p.form)||0, ppg = parseFloat(p.points_per_game)||0;
   const realized = f > 0 ? (0.6*f + 0.4*ppg) : ppg;           // what he's actually scored
   const under = underlyingPPG(p);                             // what the underlying implies
-  return 0.6*realized + 0.4*under;                            // blend: regression-aware
+  // A single hot/cold game is noise. Trust "realized" only as games accumulate;
+  // early season lean on the stable underlying numbers.
+  const wReal = Math.max(0.15, Math.min(0.6, gamesPlayed(p)/6 * 0.6));
+  return wReal*realized + (1-wReal)*under;
 }
 function nextFixtures(teamId, n){ return (fixturesByTeam[teamId]||[]).slice(0, n); }
 // projected points for the single next gameweek (handles double GWs)
@@ -504,6 +508,15 @@ function projNext(p){
   if(gwFix.length === 0) return 0;                          // blank gameweek for this player
   const base = baseForm(p);
   return gwFix.reduce((s,f)=> s + base * (FDR[f.diff]||1), 0) * avail;
+}
+// Single-GW projection used for CAPTAINCY decisions: anchored to Solio (a sharp
+// model) when it covers the player, so the armband follows the best available
+// projection rather than last week's points. projNext() stays our pure model.
+function projGW(p){
+  const ours = projNext(p);
+  const s = solioByEl[p.id];
+  if(s && s.proj != null && ours > 0) return 0.35*ours + 0.65*s.proj;
+  return ours;
 }
 // projected points across the next 5 scheduled fixtures
 function proj5(p){
@@ -742,7 +755,7 @@ function leagueEO(elementId){
 // choose captain by posture (playbook EO framework)
 function chooseCaptain(cands, posture){
   if(!cands.length) return null;
-  const top=cands.slice(0,4).map(p=>({p, proj:projNext(p), eo:(leagueEO(p.id)||{eo:null}).eo}));
+  const top=cands.slice(0,4).map(p=>({p, proj:projGW(p), eo:(leagueEO(p.id)||{eo:null}).eo}));
   const P1=top[0];
   let pick=P1, reason="highest projected this week";
   const near=top.filter(x=>P1.proj-x.proj<=1.5 && x.eo!=null);
@@ -813,7 +826,7 @@ function renderCaptainDeepDive(cands){
     const eo=leagueEO(p.id);
     return `<div class="panel" style="box-shadow:none;margin:10px 0">
       <h4 style="margin:0 0 6px">${i===0?"Top choice":"Option "+(i+1)}: ${p.web_name}
-        <span class="muted">· ${teamsById[p.team].short_name} · ${projNext(p).toFixed(1)} proj · conviction <b>${conviction}</b></span></h4>
+        <span class="muted">· ${teamsById[p.team].short_name} · ${projGW(p).toFixed(1)} proj · conviction <b>${conviction}</b></span></h4>
       ${rows}
       ${eo?`<div style="margin-top:6px" class="muted">League ownership ${eo.own}/${eo.n} (EO ${(eo.eo*100).toFixed(0)}%).</div>`:""}
     </div>`;
@@ -849,7 +862,7 @@ function renderGameweek(){
   const squad=DB.squad.map(id=>byId[id]).filter(Boolean);
 
   // CAPTAIN — posture-aware (playbook EO framework)
-  const capRanked=[...squad].filter(p=>availability(p)>0 && projNext(p)>0).sort((a,b)=>projNext(b)-projNext(a));
+  const capRanked=[...squad].filter(p=>availability(p)>0 && projGW(p)>0).sort((a,b)=>projGW(b)-projGW(a));
   const posture=leaguePosture();
   const chosenCap=capRanked.length?chooseCaptain(capRanked, posture):null;
   const cHost=document.getElementById("captainRec");
@@ -858,11 +871,11 @@ function renderGameweek(){
     const c=chosenCap.pick.p, alt=chosenCap.alt?chosenCap.alt.p:null;
     const eo=leagueEO(c.id);
     const dgw=(fixturesByTeam[c.team]||[]).filter(f=>f.event===TARGET_GW).length>1;
-    cHost.innerHTML=`<div class="rec cap"><span class="pill fdr3">${posture.label} mode</span> <b>© ${c.web_name}</b> (${teamsById[c.team].short_name}) — ${projNext(c).toFixed(1)} pts${dgw?" · <b>double gameweek!</b>":""}. ${chosenCap.reason}.
+    cHost.innerHTML=`<div class="rec cap"><span class="pill fdr3">${posture.label} mode</span> <b>© ${c.web_name}</b> (${teamsById[c.team].short_name}) — ${projGW(c).toFixed(1)} pts${dgw?" · <b>double gameweek!</b>":""}. ${chosenCap.reason}.
       ${eo?`<div class="muted" style="margin-top:4px">League ownership: <b>${eo.own}/${eo.n}</b>${eo.cap?`, captained by ${eo.cap}`:""} (EO ${(eo.eo*100).toFixed(0)}%).</div>`:""}
       <div class="muted" style="margin-top:4px">${posture.reason}</div>
       <div class="muted" style="margin-top:4px">Fixtures: ${fixtureStrip(c.team,3)}</div>
-      ${alt?`<div class="muted" style="margin-top:6px">Alternative: ${alt.web_name} (${projNext(alt).toFixed(1)} pts).</div>`:""}</div>`;
+      ${alt?`<div class="muted" style="margin-top:6px">Alternative: ${alt.web_name} (${projGW(alt).toFixed(1)} pts).</div>`:""}</div>`;
   }
   document.getElementById("capDeepWrap").style.display = chosenCap ? "block" : "none";
   if(chosenCap) renderCaptainDeepDive(capRanked);
@@ -928,7 +941,7 @@ function renderGameweek(){
     const ro=rivalOwnership(cap.id);
     if(ro) note = ro.own>=ro.tot/2 ? ` — ${ro.own}/${ro.tot} rivals have him too, so it's the safe call`
                                     : ` — only ${ro.own}/${ro.tot} rivals own him, a bold differential captain`;
-    bullets.push(`Captain <b>${cap.web_name}</b> (${projNext(cap).toFixed(1)} proj pts)${note}.`);
+    bullets.push(`Captain <b>${cap.web_name}</b> (${projGW(cap).toFixed(1)} proj pts)${note}.`);
     if(SOLIO && SOLIO.players && SOLIO.players.length){
       const top=SOLIO.players.find(s=>s.element);
       if(top && top.element===cap.id) bullets.push(`<span class="muted">✓ Solio agrees — same top pick.</span>`);
