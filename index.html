@@ -99,6 +99,7 @@
 
 <main>
   <div id="globalStatus" class="status"></div>
+  <div id="freshness" class="hint" style="margin:6px 0 0"></div>
 
   <nav class="tabs">
     <button data-tab="team" class="active">1 · My Team</button>
@@ -365,6 +366,7 @@ let FIXTURES = null;             // fixtures
 let LEAGUE = null;               // mini-league scouting (rival squads)
 let SOLIO = null;                // Solio Analytics projections
 let solioByEl = {};              // fpl element id -> solio row
+let META = null;                 // data freshness metadata
 let byId = {};                   // player id -> element
 let teamsById = {};              // team id -> team
 let fixturesByTeam = {};         // team id -> [{event,diff,home,opp}]
@@ -435,12 +437,16 @@ async function loadCore(){
   byId = {}; teamsById = {}; fixturesByTeam = {};
   BOOT.elements.forEach(p => byId[p.id] = p);
   BOOT.teams.forEach(t => { teamsById[t.id] = t; fixturesByTeam[t.id] = []; });
-  // target gameweek = next upcoming, else current
-  const nextEv = BOOT.events.find(e => e.is_next);
-  const curEv  = BOOT.events.find(e => e.is_current);
-  TARGET_GW = (nextEv && nextEv.id) || (curEv && curEv.id) ||
-              (BOOT.events.find(e=>!e.finished)||{}).id || 1;
-  FIXTURES.filter(f => !f.finished && f.event != null).forEach(f => {
+  // Target gameweek from real fixture deadlines — robust even if the bundled
+  // data is a little stale (the next gameweek is whichever deadline hasn't passed).
+  const nowMs = Date.now();
+  const future = BOOT.events.filter(e => e.deadline_time && Date.parse(e.deadline_time) > nowMs)
+                            .sort((a,b) => Date.parse(a.deadline_time) - Date.parse(b.deadline_time));
+  TARGET_GW = future.length ? future[0].id
+            : ((BOOT.events.find(e=>e.is_next) || BOOT.events.find(e=>e.is_current)
+               || BOOT.events.find(e=>!e.finished) || {}).id || 1);
+  // Only build fixtures from the target gameweek onward.
+  FIXTURES.filter(f => f.event != null && f.event >= TARGET_GW).forEach(f => {
     fixturesByTeam[f.team_h].push({event:f.event, diff:f.team_h_difficulty, home:true,  opp:f.team_a});
     fixturesByTeam[f.team_a].push({event:f.event, diff:f.team_a_difficulty, home:false, opp:f.team_h});
   });
@@ -452,8 +458,21 @@ async function loadCore(){
     SOLIO = await loadLocal("solio.json"); solioByEl = {};
     (SOLIO.players||[]).forEach((p,i)=>{ p.rank=i+1; if(p.element) solioByEl[p.element]=p; });
   }catch(e){ SOLIO = null; solioByEl = {}; }
-  globalMsg("Live data loaded ✓  Next gameweek: GW"+TARGET_GW, "ok", 4000);
+  try{ META = await loadLocal("meta.json"); }catch(e){ META = null; }
+  showFreshness();
+  globalMsg("Data loaded ✓  Next gameweek: GW"+TARGET_GW, "ok", 4000);
   document.getElementById("gwTitle").textContent = "GW" + TARGET_GW;
+}
+// show how old the bundled data is, and warn if the auto-updater looks stalled
+function showFreshness(){
+  const el=document.getElementById("freshness"); if(!el) return;
+  if(!META || !META.generated){ el.textContent=""; return; }
+  const ageH=(Date.now()-Date.parse(META.generated))/3.6e6;
+  const ago = ageH<1 ? "under an hour" : ageH<48 ? Math.round(ageH)+" hours" : Math.round(ageH/24)+" days";
+  const solioStale = SOLIO && SOLIO.gw!=null && SOLIO.gw!==TARGET_GW;
+  el.innerHTML = `Player data last refreshed <b>${ago} ago</b> · GW${TARGET_GW} upcoming.`
+    + (ageH>18 ? ` <span class="flagbad">⚠ The auto-updater looks delayed — numbers may be stale.</span>` : "")
+    + (solioStale ? ` <span class="flagwarn">Solio still shows GW${SOLIO.gw}.</span>` : "");
 }
 
 // ---------- player maths ----------
@@ -515,7 +534,9 @@ function projNext(p){
 function projGW(p){
   const ours = projNext(p);
   const s = solioByEl[p.id];
-  if(s && s.proj != null && ours > 0) return 0.35*ours + 0.65*s.proj;
+  // only anchor to Solio when its projection is for the gameweek we're planning
+  const solioFresh = SOLIO && SOLIO.gw === TARGET_GW;
+  if(solioFresh && s && s.proj != null && ours > 0) return 0.35*ours + 0.65*s.proj;
   return ours;
 }
 // projected points across the next 5 scheduled fixtures
