@@ -225,6 +225,8 @@
       <h2>Find players to buy</h2>
       <p class="sub">Ranked by our projected points over the next 5 gameweeks. Use the filters to hunt for value or differentials.</p>
       <div class="row">
+        <div style="flex:2 1 220px"><label>Search a player by name</label>
+          <input id="fSearch" placeholder="e.g. Saka — type to search"></div>
         <div><label>Position</label>
           <select id="fPos"><option value="0">All</option><option value="1">Goalkeepers</option>
           <option value="2">Defenders</option><option value="3">Midfielders</option><option value="4">Forwards</option></select></div>
@@ -237,7 +239,7 @@
           <option value="projnext">Projected (next GW)</option>
         </select></div>
       </div>
-      <div class="btnrow"><button class="btn alt" id="applyFilters">Show players</button></div>
+      <div class="btnrow"><button class="btn alt" id="applyFilters">Search / show players</button><button class="btn ghost" id="clearFilters">Clear</button></div>
       <div class="scroll" style="margin-top:14px"><table id="exTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </section>
@@ -540,6 +542,9 @@ function minutesRisk(p){ return startRate(p) < 0.65 && (parseFloat(p.minutes)||0
 // expected points per game implied by underlying numbers
 function underlyingPPG(p){
   const t = p.element_type;
+  // Per-90 stats are meaningless on a tiny sample (a 1-minute cameo reads as if
+  // played every week). Trust them only once real minutes accumulate (~2 games).
+  const conf = Math.min(1, (parseFloat(p.minutes)||0)/180);
   const xg = p90(p,"expected_goals_per_90"), xa = p90(p,"expected_assists_per_90");
   let pts = xg*goalValue(t) + xa*3;                            // attacking returns
   const xgc = p90(p,"expected_goals_conceded_per_90");
@@ -548,8 +553,9 @@ function underlyingPPG(p){
   const dc = p90(p,"defensive_contribution_per_90");           // DefCon meta
   const thr = t === 2 ? 10 : (t === 3 ? 12 : 0);
   if(thr && dc > 0) pts += 2 * Math.min(1.1, dc/thr);
-  pts += 2;                                                    // appearance (60+ mins)
-  return pts * startRate(p);
+  pts *= conf;                                                 // shrink tiny-sample noise toward 0
+  pts += 2 * startRate(p);                                     // appearance, scaled by how much he plays
+  return pts;
 }
 function gamesPlayed(p){ return Math.max(0, (parseFloat(p.minutes)||0)/90); }
 function baseForm(p){
@@ -1218,7 +1224,10 @@ function renderExplorer(){
   const maxP=parseFloat(document.getElementById("fPrice").value);
   const maxO=parseFloat(document.getElementById("fOwn").value);
   const sort=document.getElementById("fSort").value;
+  const q=(document.getElementById("fSearch").value||"").toLowerCase().trim();
   let rows=BOOT.elements.filter(p=>availability(p)>0);
+  if(q) rows=rows.filter(p=>(p.web_name+" "+p.first_name+" "+p.second_name).toLowerCase().includes(q));
+  else rows=rows.filter(p=>(parseFloat(p.minutes)||0)>0);   // hide players who haven't featured (unless searched)
   if(pos) rows=rows.filter(p=>p.element_type===pos);
   if(!isNaN(maxP)) rows=rows.filter(p=>price(p)<=maxP);
   if(!isNaN(maxO)) rows=rows.filter(p=>parseFloat(p.selected_by_percent)<=maxO);
@@ -1317,6 +1326,12 @@ function switchTab(name){
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 document.getElementById("loadTeamBtn").onclick=loadTeamById;
 document.getElementById("applyFilters").onclick=()=>{ if(!BOOT){ loadCore().then(renderExplorer); } else renderExplorer(); };
+document.getElementById("fSearch").oninput=()=>{ if(BOOT) renderExplorer(); };
+document.getElementById("clearFilters").onclick=()=>{
+  ["fSearch","fPrice","fOwn"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("fPos").value="0"; document.getElementById("fSort").value="proj5";
+  if(BOOT) renderExplorer();
+};
 document.getElementById("manualSearch").oninput=renderManualSearch;
 document.getElementById("punditBtn").onclick=()=>{
   DB.pundit=document.getElementById("punditText").value; save(); renderPundit();
