@@ -234,8 +234,20 @@ def main():
                     team["picks"] = [x["element"] for x in plist]
                     team["captain"] = next(
                         (x["element"] for x in plist if x.get("is_captain")), None)
+                    if p.get("active_chip"):
+                        team["active_chip"] = p["active_chip"]
                 except Exception:  # noqa: BLE001
                     team["picks"] = []
+            try:
+                hist = get(f"/entry/{eid}/history/")
+                chips_used = hist.get("chips", [])
+                if chips_used:
+                    team["chips"] = [
+                        {"name": c.get("name"), "gw": c.get("event")}
+                        for c in chips_used
+                    ]
+            except Exception:  # noqa: BLE001
+                pass
             teams[str(eid)] = team
         write("league-picks.json", {
             "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
