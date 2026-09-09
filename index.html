@@ -350,10 +350,11 @@ const API = "https://fantasy.premierleague.com/api";
 // The FPL API blocks direct browser calls (no CORS header). We route through
 // public proxies and try them in order until one succeeds.
 const PROXIES = [
-  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
   u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
   u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
   u => "https://thingproxy.freeboard.io/fetch/" + u,
+  u => "https://cors-proxy.htmldriven.com/?url=" + encodeURIComponent(u),
 ];
 
 // Your team is pre-fetched into /data by the GitHub robot, so loading it is
@@ -473,51 +474,77 @@ function showFreshness(){
   const ago = ageH<1 ? "under an hour" : ageH<48 ? Math.round(ageH)+" hours" : Math.round(ageH/24)+" days";
   const solioStale = SOLIO && SOLIO.gw!=null && SOLIO.gw!==TARGET_GW;
   const healedNote = (META && META.selfHealed) ? " <span class=\"flagok\">↻ refreshed live just now.</span>" : "";
+  const stale = ageH>18 && !(META&&META.selfHealed);
+  const retryBtn = stale ? ` <button onclick="manualRefresh()" style="background:var(--accent);color:#fff;border:0;padding:4px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;vertical-align:middle">↻ Refresh now</button>` : "";
   el.innerHTML = `Player data last refreshed <b>${ago} ago</b> · GW${TARGET_GW} upcoming.`
     + healedNote
-    + (ageH>18 && !(META&&META.selfHealed) ? ` <span class="flagbad">⚠ The auto-updater looks delayed — numbers may be stale.</span>` : "")
+    + (stale ? ` <span class="flagbad">⚠ Data is stale.</span>` + retryBtn : "")
     + (solioStale ? ` <span class="flagwarn">Solio still shows GW${SOLIO.gw}.</span>` : "");
 }
 // Belt-and-suspenders: if the bundled data is clearly behind, quietly pull
 // fresh core data ourselves (via proxy) and upgrade the page. Best-effort.
 let HEALED = false;
 function dataAgeHours(){ return (META && META.generated) ? (Date.now()-Date.parse(META.generated))/3.6e6 : Infinity; }
+async function doSelfHeal(){
+  const [boot, fixtures] = await Promise.all([fetchJSON("/bootstrap-static/"), fetchJSON("/fixtures/")]);
+  if(!boot || !boot.elements || !fixtures) throw new Error("Empty response");
+  BOOT = boot; FIXTURES = fixtures;
+  byId = {}; teamsById = {}; fixturesByTeam = {};
+  BOOT.elements.forEach(p => byId[p.id] = p);
+  BOOT.teams.forEach(t => { teamsById[t.id] = t; fixturesByTeam[t.id] = []; });
+  const nowMs = Date.now();
+  const future = BOOT.events.filter(e => e.deadline_time && Date.parse(e.deadline_time) > nowMs)
+                            .sort((a,b) => Date.parse(a.deadline_time) - Date.parse(b.deadline_time));
+  if(future.length) TARGET_GW = future[0].id;
+  FIXTURES.filter(f => f.event != null && f.event >= TARGET_GW).forEach(f => {
+    fixturesByTeam[f.team_h].push({event:f.event, diff:f.team_h_difficulty, home:true,  opp:f.team_a});
+    fixturesByTeam[f.team_a].push({event:f.event, diff:f.team_a_difficulty, home:false, opp:f.team_h});
+  });
+  Object.values(fixturesByTeam).forEach(a => a.sort((x,y)=>x.event-y.event));
+  document.getElementById("gwTitle").textContent = "GW" + TARGET_GW;
+  if(DB.teamId){
+    try{
+      const entry = await fetchJSON(`/entry/${DB.teamId}/`);
+      if(entry.last_deadline_bank != null) DB.bank = entry.last_deadline_bank/10;
+      const curEv = BOOT.events.find(e=>e.is_current);
+      for(const g of [curEv && curEv.id, TARGET_GW-1, 1].filter(Boolean)){
+        try{ const pk = await fetchJSON(`/entry/${DB.teamId}/event/${g}/picks/`); DB.squad = pk.picks.map(x=>x.element); break; }catch(e){}
+      }
+      save();
+    }catch(e){}
+  }
+  HEALED = true; DATA_SOURCE = "live-healed";
+  META = META || {}; META.generated = new Date().toISOString(); META.selfHealed = true;
+  renderAll(); showFreshness();
+}
 async function maybeSelfHeal(){
-  if(HEALED || dataAgeHours() <= 8) return;      // fresh enough, or already healed
+  if(HEALED || dataAgeHours() <= 8) return;
   try{
-    const [boot, fixtures] = await Promise.all([fetchJSON("/bootstrap-static/"), fetchJSON("/fixtures/")]);
-    if(!boot || !boot.elements || !fixtures) return;
-    BOOT = boot; FIXTURES = fixtures;
-    byId = {}; teamsById = {}; fixturesByTeam = {};
-    BOOT.elements.forEach(p => byId[p.id] = p);
-    BOOT.teams.forEach(t => { teamsById[t.id] = t; fixturesByTeam[t.id] = []; });
-    const nowMs = Date.now();
-    const future = BOOT.events.filter(e => e.deadline_time && Date.parse(e.deadline_time) > nowMs)
-                              .sort((a,b) => Date.parse(a.deadline_time) - Date.parse(b.deadline_time));
-    if(future.length) TARGET_GW = future[0].id;
-    FIXTURES.filter(f => f.event != null && f.event >= TARGET_GW).forEach(f => {
-      fixturesByTeam[f.team_h].push({event:f.event, diff:f.team_h_difficulty, home:true,  opp:f.team_a});
-      fixturesByTeam[f.team_a].push({event:f.event, diff:f.team_a_difficulty, home:false, opp:f.team_h});
-    });
-    Object.values(fixturesByTeam).forEach(a => a.sort((x,y)=>x.event-y.event));
-    document.getElementById("gwTitle").textContent = "GW" + TARGET_GW;
-    // refresh the user's squad + bank live too, if loaded
-    if(DB.teamId){
-      try{
-        const entry = await fetchJSON(`/entry/${DB.teamId}/`);
-        if(entry.last_deadline_bank != null) DB.bank = entry.last_deadline_bank/10;
-        const curEv = BOOT.events.find(e=>e.is_current);
-        for(const g of [curEv && curEv.id, TARGET_GW-1, 1].filter(Boolean)){
-          try{ const pk = await fetchJSON(`/entry/${DB.teamId}/event/${g}/picks/`); DB.squad = pk.picks.map(x=>x.element); break; }catch(e){}
-        }
-        save();
-      }catch(e){}
-    }
-    HEALED = true; DATA_SOURCE = "live-healed";
-    META = META || {}; META.generated = new Date().toISOString(); META.selfHealed = true;
-    renderAll(); showFreshness();
+    await doSelfHeal();
     globalMsg("Data was behind — refreshed it live ✓","ok",4000);
-  }catch(e){ /* proxy busy — keep bundled data and the stale warning */ }
+  }catch(e){
+    showFreshness();
+  }
+}
+async function manualRefresh(){
+  globalMsg("Trying to refresh data live…","info");
+  try{
+    // First, try reloading the bundled data (in case the GitHub robot has run)
+    const freshMeta = await fetch("./data/meta.json?_t="+Date.now(), {cache:"no-store"}).then(r=>r.ok?r.json():null).catch(()=>null);
+    if(freshMeta && freshMeta.generated){
+      const freshAge = (Date.now()-Date.parse(freshMeta.generated))/3.6e6;
+      if(freshAge < 4){
+        await loadCore();
+        if(DB.squad && DB.squad.length) renderAll();
+        globalMsg("Data refreshed from the latest update ✓","ok",4000);
+        return;
+      }
+    }
+    await doSelfHeal();
+    globalMsg("Refreshed live via relay ✓","ok",4000);
+  }catch(e){
+    globalMsg("Couldn't refresh — the data relays are busy. Try a hard refresh (Ctrl+Shift+R / Cmd+Shift+R) in a few minutes.","err",8000);
+  }
 }
 
 // ---------- player maths ----------
