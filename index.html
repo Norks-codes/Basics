@@ -168,6 +168,12 @@
         <div id="chipRec"></div>
         <h3>Chip roadmap (season)</h3>
         <div id="chipRoadmap"></div>
+        <h3>Free Hit planner — which week?</h3>
+        <p class="sub">Compares your squad's fixture difficulty against the best available Free Hit XI for each upcoming gameweek. Higher gain = better week to use it.</p>
+        <div id="fhPlanner"></div>
+        <h3>Rival chip intel</h3>
+        <p class="sub">Which chips your mini-league rivals have already used — and what they have left.</p>
+        <div id="rivalChips"></div>
       </div>
     </div>
   </section>
@@ -1017,6 +1023,12 @@ function renderGameweek(){
     ch.push(`<div class="rec cap"><b>Triple Captain candidate.</b> ${capP.web_name} has a double gameweek and is in form — a strong TC window.</div>`);
   if(blanks.length>=5 && !chipUsed("freehit"))
     ch.push(`<div class="rec sell"><b>Free Hit worth a look.</b> ${blanks.length} of your players blank in GW${TARGET_GW}. A Free Hit fields a full team for one week.</div>`);
+  const fhData=fhAnalysis();
+  if(fhData && !chipUsed("freehit") && blanks.length<5){
+    const thisW=fhData.find(r=>r.gw===TARGET_GW);
+    if(thisW && thisW.rank<=3 && thisW.myHard>=4)
+      ch.push(`<div class="rec sell"><b>Free Hit signal:</b> ${thisW.myHard} of your starters face tough fixtures this week. A Free Hit would flip you to ${thisW.bestEasy} easy fixtures (+${thisW.gain.toFixed(0)} projected). See the Chip Roadmap below for the full GW-by-GW comparison.</div>`);
+  }
   const needWork=squad.filter(p=>availability(p)===0).length + weak.filter(p=>proj5(p)<4).length;
   if(needWork>=4 && !chipUsed("wildcard"))
     ch.push(`<div class="rec"><b>Wildcard on the radar.</b> Several players are injured or out of form. If free transfers can't fix it in 1–2 weeks, a Wildcard resets the squad without hits.</div>`);
@@ -1242,6 +1254,152 @@ function renderChipRoadmap(){
   if(blanks.length) out.push(`<div class="rec sell"><b>Blanks ahead:</b> ${blanks.slice(0,4).map(b=>`GW${b.gw} (${b.matches} matches)`).join(", ")}. A Free Hit fields a full team through the biggest one.</div>`);
   if(!doubles.length && !blanks.length) out.push(`<div class="rec"><span class="muted">No doubles or blanks are confirmed in the fixtures yet — normal for now. They depend on cup draws and get scheduled 2–4 weeks out, so re-check from January.</span></div>`);
   host.innerHTML=out.join("");
+  renderFhPlanner();
+  renderRivalChips();
+}
+
+function fhAnalysis(){
+  if(!BOOT || !FIXTURES || !DB.squad.length || TARGET_GW==null) return null;
+  const squad=DB.squad.map(Number).slice(0,11).map(id=>byId[id]).filter(Boolean);
+  if(squad.length<11) return null;
+  const fixMult={1:1.4, 2:1.25, 3:1.0, 4:0.8, 5:0.65};
+  const lastGw=Math.min(19, Math.max(...BOOT.events.map(e=>e.id)));
+  const results=[];
+  for(let gw=TARGET_GW; gw<=lastGw; gw++){
+    const gwFix={};
+    FIXTURES.forEach(f=>{
+      if(f.event!==gw) return;
+      gwFix[f.team_h]={opp:teamsById[f.team_a]?teamsById[f.team_a].short_name:"?",home:true,diff:f.team_h_difficulty};
+      gwFix[f.team_a]={opp:teamsById[f.team_h]?teamsById[f.team_h].short_name:"?",home:false,diff:f.team_a_difficulty};
+    });
+    let myHard=0,myEasy=0,myScore=0;
+    squad.forEach(p=>{
+      const fix=gwFix[p.team]; if(!fix) return;
+      if(fix.diff>=4) myHard++;
+      if(fix.diff<=2) myEasy++;
+      const fm=fixMult[fix.diff]||1; const hb=fix.home?1.1:1.0;
+      myScore+=(parseFloat(p.form)||0)*fm*hb;
+    });
+    const byPos={1:[],2:[],3:[],4:[]};
+    BOOT.elements.forEach(p=>{
+      if(["i","s","u"].includes(p.status)) return;
+      if((p.minutes||0)<45) return;
+      const fix=gwFix[p.team]; if(!fix) return;
+      const fm=fixMult[fix.diff]||1; const hb=fix.home?1.1:1.0;
+      const score=(parseFloat(p.form)||0)*fm*hb;
+      if(score>0) byPos[p.element_type].push({id:p.id,team:p.team,score,diff:fix.diff});
+    });
+    Object.values(byPos).forEach(a=>a.sort((x,y)=>y.score-x.score));
+    const bestXI=[]; const tc={};
+    [[1,1],[2,3],[3,5],[4,2]].forEach(([pos,cnt])=>{
+      let picked=0;
+      for(const p of byPos[pos]){
+        if(picked>=cnt) break;
+        if((tc[p.team]||0)>=3) continue;
+        bestXI.push(p); tc[p.team]=(tc[p.team]||0)+1; picked++;
+      }
+    });
+    const bestScore=bestXI.reduce((s,p)=>s+p.score,0);
+    const bestEasy=bestXI.filter(p=>p.diff<=2).length;
+    results.push({gw,myHard,myEasy,myScore,bestScore,bestEasy,gain:bestScore-myScore});
+  }
+  results.sort((a,b)=>b.gain-a.gain);
+  results.forEach((r,i)=>r.rank=i+1);
+  results.sort((a,b)=>a.gw-b.gw);
+  return results;
+}
+
+function renderFhPlanner(){
+  const host=document.getElementById("fhPlanner"); if(!host) return;
+  if(DB.chips.freehit && DB.chips.freehit.used){
+    host.innerHTML='<p class="muted">You\'ve already used your Free Hit.</p>'; return;
+  }
+  const data=fhAnalysis();
+  if(!data||!data.length){ host.innerHTML='<p class="muted">Load your squad to see Free Hit analysis.</p>'; return; }
+  const maxGain=Math.max(...data.map(r=>r.gain));
+  let html='<div class="scroll"><table style="width:100%;border-collapse:collapse;font-size:13.5px"><thead><tr>'
+    +'<th style="text-align:left;padding:6px">GW</th>'
+    +'<th style="text-align:center;padding:6px">Your tough</th>'
+    +'<th style="text-align:center;padding:6px">Your easy</th>'
+    +'<th style="text-align:center;padding:6px">FH easy</th>'
+    +'<th style="text-align:left;padding:6px">FH gain</th>'
+    +'<th style="text-align:left;padding:6px">Verdict</th>'
+    +'</tr></thead><tbody>';
+  data.forEach(r=>{
+    const pct=maxGain>0?r.gain/maxGain*100:0;
+    const bar=`<div style="background:var(--accent);height:14px;border-radius:4px;width:${Math.round(pct)}%;min-width:${r.gain>0?'4px':'0'}"></div>`;
+    let verdict='', cls='';
+    if(r.rank===1){ verdict='Best week'; cls='style="background:rgba(0,255,135,.12);font-weight:700"'; }
+    else if(r.rank<=3){ verdict='Strong'; cls='style="background:rgba(0,255,135,.06)"'; }
+    else if(r.rank<=5) verdict='Decent';
+    else if(r.myHard<=1 && r.myEasy>=4) verdict='Squad OK';
+    else verdict='';
+    const gwMark=r.gw===TARGET_GW?' (this week)':'';
+    html+=`<tr ${cls}>`
+      +`<td style="padding:6px;white-space:nowrap"><b>GW${r.gw}</b>${gwMark}</td>`
+      +`<td style="text-align:center;padding:6px;color:${r.myHard>=5?'var(--bad)':r.myHard>=3?'var(--warn)':'inherit'}">${r.myHard}</td>`
+      +`<td style="text-align:center;padding:6px;color:${r.myEasy>=5?'var(--good)':'inherit'}">${r.myEasy}</td>`
+      +`<td style="text-align:center;padding:6px;color:var(--good)">${r.bestEasy}</td>`
+      +`<td style="padding:6px"><div style="display:flex;align-items:center;gap:6px"><span style="min-width:32px">+${r.gain.toFixed(0)}</span><div style="flex:1">${bar}</div></div></td>`
+      +`<td style="padding:6px;font-size:12.5px;font-weight:${r.rank<=3?700:400}">${verdict}</td>`
+      +`</tr>`;
+  });
+  html+='</tbody></table></div>';
+  const best=data.reduce((a,b)=>a.gain>b.gain?a:b);
+  const thisWeek=data.find(r=>r.gw===TARGET_GW);
+  let advice='';
+  if(thisWeek && thisWeek.rank<=3 && thisWeek.myHard>=5)
+    advice=`<div class="rec sell" style="margin-top:10px"><b>This week (GW${TARGET_GW}) is a strong Free Hit week</b> — ${thisWeek.myHard} of your starters face tough fixtures. A Free Hit flips you to ${thisWeek.bestEasy} easy fixtures.</div>`;
+  else if(best.gw===TARGET_GW)
+    advice=`<div class="rec cap" style="margin-top:10px"><b>GW${TARGET_GW} is your #1 Free Hit week.</b> Don't wait — this is the best window before chips reset.</div>`;
+  else
+    advice=`<div class="rec" style="margin-top:10px"><b>Best Free Hit window: GW${best.gw}</b> (+${best.gain.toFixed(0)} projected gain). ${best.gw-TARGET_GW<=3?"Coming soon — start planning.":"You have time, but don't let it expire at GW19."}</div>`;
+  const expiry=19-TARGET_GW;
+  if(expiry<=4) advice+=`<div class="rec sell" style="margin-top:6px"><b>${expiry} gameweek${expiry===1?'':'s'} left before chip reset.</b> Use it or lose it.</div>`;
+  host.innerHTML=html+advice;
+}
+
+function renderRivalChips(){
+  const host=document.getElementById("rivalChips"); if(!host) return;
+  if(!LEAGUE||!LEAGUE.teams){ host.innerHTML='<p class="muted">League data not loaded.</p>'; return; }
+  const chipNames={'3xc':'Triple Captain','bboost':'Bench Boost','freehit':'Free Hit','wildcard':'Wildcard','manager':'Asst Manager'};
+  const allChips=['bboost','3xc','freehit','wildcard'];
+  const meId=String(LEAGUE.me||BAKED_ID);
+  let usedCount=0, totalRivals=0;
+  const chipTotals={bboost:0,'3xc':0,freehit:0,wildcard:0};
+  const rivalRows=[];
+  Object.entries(LEAGUE.teams).forEach(([eid,t])=>{
+    if(String(eid)===meId) return;
+    totalRivals++;
+    const chips=t.chips||[];
+    const usedNames=chips.map(c=>c.name);
+    if(usedNames.length) usedCount++;
+    usedNames.forEach(n=>{ if(chipTotals[n]!=null) chipTotals[n]++; });
+    const remaining=allChips.filter(c=>!usedNames.includes(c));
+    rivalRows.push({name:t.name,manager:t.manager,rank:t.rank,chips,remaining});
+  });
+  let html=`<div class="cards" style="margin-bottom:14px">`;
+  allChips.forEach(c=>{
+    const used=chipTotals[c]; const pct=totalRivals?Math.round(used/totalRivals*100):0;
+    html+=`<div class="card"><div class="lbl">${chipNames[c]}</div>`
+      +`<div class="big" style="font-size:22px">${used}/${totalRivals}</div>`
+      +`<div class="muted" style="font-size:12px">${pct}% of rivals used it</div></div>`;
+  });
+  html+=`</div>`;
+  html+=`<p style="margin:8px 0;font-size:13.5px"><b>${usedCount}</b> of ${totalRivals} rivals have used at least one chip. <b>${totalRivals-usedCount}</b> still have all chips intact.</p>`;
+  html+=`<details><summary style="cursor:pointer;font-weight:600;font-size:13.5px;margin:8px 0">Show rival-by-rival chip usage</summary>`;
+  html+=`<div class="scroll"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>`
+    +`<th style="text-align:left;padding:5px">#</th><th style="text-align:left;padding:5px">Team</th>`
+    +`<th style="text-align:left;padding:5px">Used</th><th style="text-align:left;padding:5px">Remaining</th></tr></thead><tbody>`;
+  rivalRows.sort((a,b)=>(a.rank||99)-(b.rank||99));
+  rivalRows.forEach(r=>{
+    const usedStr=r.chips.length?r.chips.map(c=>`${chipNames[c.name]||c.name} (GW${c.gw})`).join(', '):'<span class="muted">none</span>';
+    const remStr=r.remaining.length?r.remaining.map(c=>chipNames[c]||c).join(', '):'<span style="color:var(--bad)">all used</span>';
+    html+=`<tr><td style="padding:5px">${r.rank||'—'}</td><td style="padding:5px"><b>${r.name}</b></td>`
+      +`<td style="padding:5px">${usedStr}</td><td style="padding:5px">${remStr}</td></tr>`;
+  });
+  html+=`</tbody></table></div></details>`;
+  host.innerHTML=html;
 }
 
 // ---------- explorer ----------
