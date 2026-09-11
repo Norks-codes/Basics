@@ -87,6 +87,17 @@
   footer{max-width:1100px;margin:0 auto;padding:0 16px 40px;color:var(--muted);font-size:12.5px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+  .hm-cell{width:38px;height:28px;display:inline-flex;align-items:center;justify-content:center;
+    border-radius:5px;font-size:11px;font-weight:700;margin:1px}
+  .hm1,.hm2{background:rgba(10,135,84,.22);color:var(--good)}
+  .hm3{background:rgba(120,120,120,.14);color:var(--muted)}
+  .hm4{background:rgba(192,57,43,.18);color:var(--bad)}
+  .hm5{background:rgba(192,57,43,.32);color:var(--bad)}
+  .hm-flag{font-size:10px;vertical-align:super;margin-left:1px}
+  .th-path{border-left:4px solid var(--accent);background:var(--bg);border-radius:0 10px 10px 0;
+    padding:10px 14px;margin:8px 0;font-size:13.5px}
+  .th-path b{color:var(--accent)}
+  .th-gw-bad{background:rgba(192,57,43,.10);border-radius:6px;padding:2px 6px;font-weight:700;color:var(--bad)}
 </style>
 </head>
 <body>
@@ -174,6 +185,9 @@
         <h3>Rival chip intel</h3>
         <p class="sub">Which chips your mini-league rivals have already used — and what they have left.</p>
         <div id="rivalChips"></div>
+        <h3>Transfer horizon — plan ahead</h3>
+        <p class="sub">A fixture heatmap of your squad across the next 6 gameweeks. Spots the toughest upcoming week and maps a free-transfer path to fix it before it arrives.</p>
+        <div id="transferHorizon"></div>
       </div>
     </div>
   </section>
@@ -1066,6 +1080,11 @@ function renderGameweek(){
     bullets.push(`No upgrade beats your squad within budget — <b>roll your free transfer</b> and bank it.`);
   }
   bullets.push(hadChip ? `Chip: ${stripTags(ch[0])}` : `Chips: nothing signalled — hold them for double/blank gameweeks.`);
+  const horizon=transferHorizon();
+  if(horizon && horizon.worstGw && horizon.worstGw.hard>=3 && horizon.worstGw.gw>TARGET_GW){
+    const wg=horizon.worstGw, away=wg.gw-TARGET_GW;
+    bullets.push(`Fixture alert: <b>GW${wg.gw}</b> has ${wg.hard}/11 tough fixtures in ${away} week${away===1?'':'s'} — see <b>Transfer Horizon</b> below for the plan.`);
+  }
 
   move.innerHTML=`<div class="rec cap" style="border-left-width:6px;background:linear-gradient(100deg,rgba(0,255,135,.10),transparent)">
     <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:6px;font-weight:700">⚡ Your move this week · GW${TARGET_GW}</div>
@@ -1256,6 +1275,7 @@ function renderChipRoadmap(){
   host.innerHTML=out.join("");
   renderFhPlanner();
   renderRivalChips();
+  renderTransferHorizon();
 }
 
 function fhAnalysis(){
@@ -1399,6 +1419,169 @@ function renderRivalChips(){
       +`<td style="padding:5px">${usedStr}</td><td style="padding:5px">${remStr}</td></tr>`;
   });
   html+=`</tbody></table></div></details>`;
+  host.innerHTML=html;
+}
+
+// ---------- transfer horizon planner ----------
+function transferHorizon(){
+  if(!BOOT || !FIXTURES || !DB.squad.length || TARGET_GW==null) return null;
+  const squad=DB.squad.map(Number).slice(0,11).map(id=>byId[id]).filter(Boolean);
+  if(squad.length<8) return null;
+  const HORIZON=6;
+  const lastGw=Math.min(19, Math.max(...BOOT.events.map(e=>e.id)));
+  const endGw=Math.min(lastGw, TARGET_GW+HORIZON-1);
+  if(endGw<TARGET_GW) return null;
+
+  const gwRange=[];
+  for(let g=TARGET_GW;g<=endGw;g++) gwRange.push(g);
+
+  const gwFix={};
+  gwRange.forEach(gw=>{
+    const m={};
+    FIXTURES.forEach(f=>{
+      if(f.event!==gw) return;
+      m[f.team_h]={opp:teamsById[f.team_a]?teamsById[f.team_a].short_name:"?",home:true,diff:f.team_h_difficulty};
+      m[f.team_a]={opp:teamsById[f.team_h]?teamsById[f.team_h].short_name:"?",home:false,diff:f.team_a_difficulty};
+    });
+    gwFix[gw]=m;
+  });
+
+  const playerRows=squad.map(p=>{
+    const fixes=gwRange.map(gw=>{
+      const f=gwFix[gw][p.team];
+      return f?{gw,opp:f.opp,home:f.home,diff:f.diff}:{gw,opp:null,home:false,diff:0};
+    });
+    const hardCount=fixes.filter(f=>f.diff>=4).length;
+    return {p,fixes,hardCount};
+  });
+
+  const gwTotals=gwRange.map(gw=>{
+    let hard=0,easy=0,score=0;
+    squad.forEach(p=>{
+      const f=gwFix[gw][p.team];
+      if(!f) return;
+      if(f.diff>=4) hard++;
+      if(f.diff<=2) easy++;
+      score+=f.diff;
+    });
+    return {gw,hard,easy,score};
+  });
+
+  const worstGw=[...gwTotals].sort((a,b)=>b.hard-a.hard||b.score-a.score)[0];
+
+  let transferPath=[];
+  if(worstGw && worstGw.hard>=3 && worstGw.gw>TARGET_GW){
+    const weeksUntil=worstGw.gw-TARGET_GW;
+    const ftNow=DB.ft||1;
+    const ftAvail=Math.min(ftNow+weeksUntil-1, ftNow+weeksUntil);
+    const atRisk=playerRows.filter(r=>{
+      const f=r.fixes.find(x=>x.gw===worstGw.gw);
+      return f && f.diff>=4;
+    }).sort((a,b)=>b.hardCount-a.hardCount);
+
+    const budget=DB.bank||0;
+    const owned=new Set(DB.squad.map(Number));
+
+    atRisk.slice(0,Math.min(atRisk.length,ftAvail)).forEach((row,i)=>{
+      const out=row.p;
+      const targetFix=gwFix[worstGw.gw];
+      const cands=BOOT.elements.filter(p=>
+        p.element_type===out.element_type &&
+        !owned.has(p.id) &&
+        price(p)<=price(out)+budget+0.001 &&
+        availability(p)>0 &&
+        (p.minutes||0)>=45
+      ).map(p=>{
+        const tf=targetFix[p.team];
+        const targetDiff=tf?tf.diff:3;
+        const fiveGw=proj5(p);
+        return {p,targetDiff,fiveGw};
+      }).filter(c=>c.targetDiff<=2)
+        .sort((a,b)=>b.fiveGw-a.fiveGw);
+
+      const best=cands[0];
+      if(best){
+        const doGw=Math.min(TARGET_GW+i, worstGw.gw-1);
+        transferPath.push({
+          gw:doGw, out:out, into:best.p,
+          targetDiff:best.targetDiff,
+          fiveGw:best.fiveGw,
+          reason:`${out.web_name} faces ${gwFix[worstGw.gw][out.team]?gwFix[worstGw.gw][out.team].opp:'tough'} (FDR ${gwFix[worstGw.gw][out.team]?gwFix[worstGw.gw][out.team].diff:'?'}) in GW${worstGw.gw}`
+        });
+        owned.add(best.p.id);
+        owned.delete(out.id);
+      }
+    });
+  }
+
+  return {gwRange, playerRows, gwTotals, worstGw, transferPath};
+}
+
+function renderTransferHorizon(){
+  const host=document.getElementById("transferHorizon"); if(!host) return;
+  const data=transferHorizon();
+  if(!data){ host.innerHTML='<p class="muted">Load your squad to see the transfer horizon.</p>'; return; }
+
+  const {gwRange, playerRows, gwTotals, worstGw, transferPath}=data;
+
+  let html='<div class="scroll"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>'
+    +'<th style="text-align:left;padding:5px;min-width:100px">Player</th>';
+  gwRange.forEach(gw=>{
+    const isWorst=worstGw&&gw===worstGw.gw&&worstGw.hard>=3;
+    html+=`<th style="text-align:center;padding:5px;min-width:52px">${isWorst?'<span class="th-gw-bad">':''}GW${gw}${isWorst?'</span>':''}</th>`;
+  });
+  html+='<th style="text-align:center;padding:5px">Hard</th></tr></thead><tbody>';
+
+  playerRows.sort((a,b)=>b.hardCount-a.hardCount);
+  playerRows.forEach(row=>{
+    const p=row.p;
+    html+=`<tr><td style="padding:5px;white-space:nowrap"><b>${p.web_name}</b> <span class="muted" style="font-size:11px">${teamsById[p.team].short_name}</span></td>`;
+    row.fixes.forEach(f=>{
+      if(!f.opp){
+        html+=`<td style="text-align:center;padding:2px"><span class="hm-cell" style="background:var(--line);color:var(--muted)">—</span></td>`;
+      }else{
+        html+=`<td style="text-align:center;padding:2px"><span class="hm-cell hm${f.diff}" title="FDR ${f.diff} · ${f.opp} ${f.home?'(H)':'(A)'}">${f.opp.slice(0,3)}</span></td>`;
+      }
+    });
+    const hColor=row.hardCount>=3?'var(--bad)':row.hardCount>=2?'var(--warn)':'var(--good)';
+    html+=`<td style="text-align:center;padding:5px;font-weight:700;color:${hColor}">${row.hardCount}</td></tr>`;
+  });
+
+  html+='<tr style="border-top:2px solid var(--line)"><td style="padding:5px;font-weight:700">Tough fixtures</td>';
+  gwRange.forEach(gw=>{
+    const t=gwTotals.find(x=>x.gw===gw);
+    const h=t?t.hard:0;
+    const color=h>=5?'var(--bad)':h>=3?'var(--warn)':'var(--good)';
+    html+=`<td style="text-align:center;padding:5px;font-weight:700;color:${color}">${h}/11</td>`;
+  });
+  html+='<td></td></tr></tbody></table></div>';
+
+  if(worstGw && worstGw.hard>=3){
+    const weeksAway=worstGw.gw-TARGET_GW;
+    html+=`<div class="rec sell" style="margin-top:12px"><b>GW${worstGw.gw} is your toughest week ahead</b> — ${worstGw.hard} of 11 starters face FDR 4-5 fixtures.`
+      +` ${weeksAway>0?`That's ${weeksAway} gameweek${weeksAway===1?'':'s'} away — plan your free transfers to reshape the squad before it hits.`
+        :'That\'s this week. Consider the Free Hit if you haven\'t used it.'}</div>`;
+  }else{
+    html+=`<div class="rec buy" style="margin-top:12px"><b>No fixture crisis ahead.</b> Your squad has a balanced run across the next ${gwRange.length} gameweeks. Roll transfers and save them for when trouble appears.</div>`;
+  }
+
+  if(transferPath.length){
+    html+=`<h3 style="margin:18px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Transfer path to GW${worstGw.gw}</h3>`;
+    html+=`<p style="font-size:13.5px;color:var(--muted);margin:0 0 8px">A sequence of free transfers across the next ${worstGw.gw-TARGET_GW} gameweeks to fix the GW${worstGw.gw} cluster. Each move uses a free transfer — no hits needed.</p>`;
+    transferPath.forEach((t,i)=>{
+      const outFix=t.reason;
+      const inTeam=teamsById[t.into.team]?teamsById[t.into.team].short_name:'?';
+      html+=`<div class="th-path">`
+        +`<div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">GW${t.gw} transfer · step ${i+1}</div>`
+        +`<b>OUT ${t.out.web_name}</b> (£${price(t.out).toFixed(1)}m) → <b>IN ${t.into.web_name}</b> (${inTeam}, £${price(t.into).toFixed(1)}m)`
+        +`<div class="muted" style="margin-top:4px">${outFix}. ${t.into.web_name} has an easy GW${worstGw.gw} fixture (FDR ${t.targetDiff}) and projects ${t.fiveGw.toFixed(1)} pts over 5 GW.</div>`
+        +`<div class="muted" style="margin-top:2px">Replacement fixtures: ${fixtureStrip(t.into.team,4)}</div>`
+        +`</div>`;
+    });
+  }else if(worstGw && worstGw.hard>=3 && worstGw.gw===TARGET_GW){
+    html+=`<p class="muted" style="margin-top:8px">The tough week is <b>now</b> — no time for a transfer path. Consider using the Free Hit chip instead (see above).</p>`;
+  }
+
   host.innerHTML=html;
 }
 
