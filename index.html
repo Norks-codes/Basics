@@ -1453,9 +1453,27 @@ function renderManualSearch(){
 }
 
 // ---------- season log ----------
+function syncChipsFromData(){
+  if(!LEAGUE||!LEAGUE.teams) return;
+  const meId=String(LEAGUE.me||BAKED_ID);
+  const myTeam=LEAGUE.teams[meId];
+  if(!myTeam||!myTeam.chips) return;
+  myTeam.chips.forEach(c=>{
+    const key=c.name;
+    if(!key) return;
+    if(!DB.chips[key]||!DB.chips[key].used){
+      DB.chips[key]={used:true,gw:c.gw||"?"};
+    }
+  });
+  save();
+}
 function renderChips(){
+  syncChipsFromData();
   const defs=[["wildcard","Wildcard"],["3xc","Triple Captain"],["bboost","Bench Boost"],["freehit","Free Hit"]];
-  document.getElementById("chipTracker").innerHTML=defs.map(([k,label])=>{
+  const remaining=defs.filter(([k])=>!DB.chips[k]||!DB.chips[k].used).length;
+  document.getElementById("chipTracker").innerHTML=
+    `<p style="margin:0 0 10px;font-size:13.5px"><b>${remaining}</b> of 4 chips available. ${remaining<=1&&TARGET_GW<=19?'<span style="color:var(--warn)">Chips reset at GW19 — use them or lose them.</span>':''}</p>`
+    +defs.map(([k,label])=>{
     const c=DB.chips[k];
     return `<div class="card"><div class="lbl">${label}</div>
       <div class="big" style="font-size:18px">${c&&c.used?("Used GW"+(c.gw||"?")):"Available"}</div>
