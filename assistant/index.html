@@ -1,0 +1,556 @@
+<title>Follow-Through</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one working column — capture bar, attention summary, tabbed lists; projects open as cards with their own notes. */
+:root {
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --ink: #1d2320;
+  --muted: #5d6762;
+  --line: #dde1dc;
+  --accent: #2f5d50;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ece8;
+  --bad: #b3261e;
+  --bad-soft: #fbe9e7;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d9;
+  --soon: #2c5282;
+  --soon-soft: #e5edf7;
+  --p1: #b4532a; --p2: #2f6f8f; --p3: #7a4e9a; --p4: #4f7a2f; --p5: #9a3f5c; --p6: #5d6762;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #151917; --surface: #1d2220; --ink: #e8ece9; --muted: #9aa49f; --line: #2f3633;
+  --accent: #8cc4b2; --accent-ink: #10201a; --accent-soft: #23332d;
+  --bad: #f2a29b; --bad-soft: #3a1f1d; --warn: #e8c178; --warn-soft: #36301c; --soon: #9cc0ea; --soon-soft: #1f2b3a;
+  --p1: #e59a76; --p2: #7fbedb; --p3: #c6a2e2; --p4: #a6cf86; --p5: #e59ab3; --p6: #9aa49f;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #151917; --surface: #1d2220; --ink: #e8ece9; --muted: #9aa49f; --line: #2f3633;
+  --accent: #8cc4b2; --accent-ink: #10201a; --accent-soft: #23332d;
+  --bad: #f2a29b; --bad-soft: #3a1f1d; --warn: #e8c178; --warn-soft: #36301c; --soon: #9cc0ea; --soon-soft: #1f2b3a;
+  --p1: #e59a76; --p2: #7fbedb; --p3: #c6a2e2; --p4: #a6cf86; --p5: #e59ab3; --p6: #9aa49f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 20px; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 1.9rem; }
+h2 { font-size: 1.05rem; }
+h3 { font-size: 1.2rem; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.date { font-family: var(--f-mono); color: var(--muted); font-size: .85rem; }
+.summary { color: var(--muted); margin: 4px 0 0; }
+.summary b { color: var(--ink); font-weight: 600; }
+.banner { font-size: .85rem; color: var(--warn); background: var(--warn-soft); border-radius: var(--r); padding: 8px 12px; }
+.err { color: var(--bad); background: var(--bad-soft); }
+
+/* capture */
+.capture { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.kinds button, .chip, .tabs button { font: 500 .85rem var(--f-body); border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.kinds button[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row > * { min-width: 0; }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#c-title { flex: 1 1 100%; font-size: 1rem; }
+#c-who { flex: 1 1 160px; }
+#c-project { flex: 1 1 160px; }
+#c-due { flex: 0 1 160px; font-family: var(--f-mono); font-size: .85rem; }
+.quick { display: flex; gap: 4px; flex-wrap: wrap; }
+.quick button { font: .78rem var(--f-mono); background: none; border: 1px dashed var(--line); color: var(--muted); border-radius: 6px; padding: 3px 7px; cursor: pointer; }
+.btn { font: 600 .9rem var(--f-body); border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 9px 16px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
+.btn.danger { background: var(--bad); color: var(--surface); }
+.hint { font-size: .8rem; color: var(--muted); }
+
+/* tabs + filters */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.tabs button { border-radius: 8px; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tabs .n { font-family: var(--f-mono); font-size: .75rem; opacity: .75; margin-left: 4px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: .8rem; padding: 3px 10px; }
+
+/* lists */
+section.group { display: grid; gap: 8px; }
+.group-h { display: flex; align-items: baseline; gap: 8px; }
+.group-h .n { font-family: var(--f-mono); color: var(--muted); font-size: .8rem; }
+.group-h p { margin: 0; color: var(--muted); font-size: .85rem; }
+ul.items { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+ul.items > li { border-top: 1px solid var(--line); }
+ul.items > li:first-child { border-top: 0; }
+.item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; padding: 11px 12px; align-items: start; }
+.item .check { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); }
+.item .body { min-width: 0; }
+.item .title { font-weight: 500; overflow-wrap: anywhere; cursor: pointer; }
+.item.done .title { text-decoration: line-through; color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: .8rem; color: var(--muted); margin-top: 3px; align-items: center; }
+.meta .kind { text-transform: uppercase; letter-spacing: .06em; font-size: .7rem; font-weight: 600; }
+.pdot { display: inline-flex; align-items: center; gap: 5px; }
+.pdot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--pc, var(--p6)); }
+.pill { font-family: var(--f-mono); font-size: .75rem; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); white-space: nowrap; }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.soon { background: var(--soon-soft); color: var(--soon); }
+.notes { font-size: .85rem; color: var(--muted); margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.acts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.acts button { font: 500 .75rem var(--f-body); background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+.acts button.strong { color: var(--accent); border-color: var(--accent); }
+.acts button:hover, .quick button:hover, .chip:hover { border-color: var(--ink); color: var(--ink); }
+.empty { padding: 18px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); font-size: .9rem; }
+.editor { display: grid; gap: 8px; padding: 12px; background: var(--accent-soft); }
+.editor textarea { min-height: 70px; resize: vertical; }
+.editor .row input[type="text"] { flex: 1 1 180px; }
+
+/* projects */
+.projects { display: grid; gap: 14px; }
+.proj { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 10px; border-top: 4px solid var(--pc, var(--p6)); }
+.proj .desc { margin: 0; color: var(--muted); font-size: .9rem; }
+.proj textarea { width: 100%; min-height: 110px; resize: vertical; background: var(--bg); }
+.proj .stat { font-family: var(--f-mono); font-size: .78rem; color: var(--muted); }
+.label { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.saved { font-size: .75rem; color: var(--accent); }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: .85rem; max-width: min(92vw, 520px); box-shadow: 0 6px 24px rgba(0,0,0,.2); }
+.toast textarea { width: 100%; margin-top: 8px; background: var(--bg); color: var(--ink); min-height: 80px; }
+@media (max-width: 560px) {
+  .item { grid-template-columns: auto 1fr; }
+  .acts { grid-column: 2; justify-content: flex-start; }
+  h1 { font-size: 1.6rem; }
+}
+@media (prefers-reduced-motion: no-preference) { .item { transition: background .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Follow-Through</h1>
+      <p class="summary" id="summary">Loading your list…</p>
+    </div>
+    <span class="date" id="today"></span>
+  </header>
+  <div id="banner" hidden></div>
+
+  <form class="capture" id="capture" autocomplete="off">
+    <div class="kinds" role="group" aria-label="What kind of thing is this?">
+      <button type="button" data-kind="task" aria-pressed="true">I need to do</button>
+      <button type="button" data-kind="waiting" aria-pressed="false">Someone owes me</button>
+      <button type="button" data-kind="reply" aria-pressed="false">Email to reply to</button>
+      <button type="button" data-kind="note" aria-pressed="false">Detail to remember</button>
+    </div>
+    <div class="row">
+      <input id="c-title" placeholder="e.g. Draft section 2 of the position paper" required>
+      <input id="c-who" placeholder="Who promised it?" hidden>
+      <select id="c-project" aria-label="Project"></select>
+      <input id="c-due" type="date" aria-label="Due date">
+      <div class="quick" id="quick">
+        <button type="button" data-q="0">Today</button>
+        <button type="button" data-q="1">Tomorrow</button>
+        <button type="button" data-q="fri">Fri</button>
+        <button type="button" data-q="7">+1 wk</button>
+        <button type="button" data-q="none">No date</button>
+      </div>
+    </div>
+    <div class="row" style="justify-content: space-between;">
+      <span class="hint" id="c-hint">Anything with a date shows up on Today when it's due.</span>
+      <button class="btn" type="submit">Add</button>
+    </div>
+  </form>
+
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <div class="filters" id="filters"></div>
+  <main id="view"></main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pad = n => String(n).padStart(2, '0');
+  const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const todayISO = () => iso(new Date());
+  const addDays = (n, from) => { const d = from ? new Date(from + 'T12:00') : new Date(); d.setDate(d.getDate() + n); return iso(d); };
+  const nextFriday = () => { const d = new Date(); const add = (5 - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + add); return iso(d); };
+  const diffDays = s => Math.round((new Date(s + 'T12:00') - new Date(todayISO() + 'T12:00')) / 864e5);
+  const fmt = s => new Date(s + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+  const KIND = {
+    task: { label: 'To do', ph: 'e.g. Draft section 2 of the position paper', hint: "Anything with a date shows up on Today when it's due." },
+    waiting: { label: 'Waiting on', ph: 'What did they promise? e.g. Market study deliverables', hint: "Put the date they promised. The day it passes, it moves to 'Chase now'." },
+    reply: { label: 'Reply owed', ph: 'Who/what is the email about? e.g. Kofi re: venue quote', hint: 'Replies older than 2 days get flagged. Add a date if you promised one.' },
+    note: { label: 'Note', ph: 'e.g. Side event room holds 60, AV included', hint: 'Notes sit with the project. Longer details go in the project page.' },
+  };
+  const PCOLORS = ['--p1', '--p2', '--p3', '--p4', '--p5', '--p6'];
+
+  const state = { items: [], projects: [], tab: 'today', filter: 'all', kind: 'task', editing: null, confirmDel: null, ready: false };
+  let backend = null;
+
+  // ---------- storage: claude.ai db when available, else this browser ----------
+  function dbBackend(db) {
+    return {
+      kind: 'db',
+      sub(col, cb) {
+        return db.collection(col).onSnapshot(
+          s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+          e => showBanner(`Lost connection to your saved list (${e.code}). Reload the page to reconnect.`, true));
+      },
+      add: (col, data) => db.collection(col).add(data),
+      update: (col, id, data) => db.collection(col).doc(id).update(data),
+      remove: (col, id) => db.collection(col).doc(id).delete(),
+    };
+  }
+  function localBackend() {
+    const subs = {};
+    const load = c => { try { return JSON.parse(localStorage.getItem('ft.' + c) || '[]'); } catch { return []; } };
+    const save = (c, a) => { try { localStorage.setItem('ft.' + c, JSON.stringify(a)); } catch {} (subs[c] || []).forEach(f => f(a)); };
+    const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    return {
+      kind: 'local',
+      sub(c, cb) { (subs[c] = subs[c] || []).push(cb); cb(load(c)); return () => {}; },
+      async add(c, d) { save(c, [...load(c), { id: id(), ...d }]); },
+      async update(c, i, d) { save(c, load(c).map(x => x.id === i ? { ...x, ...d } : x)); },
+      async remove(c, i) { save(c, load(c).filter(x => x.id !== i)); },
+    };
+  }
+  async function write(fn) {
+    try { await fn(); }
+    catch (e) {
+      const code = e && e.code;
+      showBanner(code === 'quota_exceeded' ? 'Storage is full. Delete some finished items under Done, then try again.'
+        : `That change didn't save (${code || 'error'}). Try again in a moment.`, true);
+    }
+  }
+
+  function showBanner(msg, isErr) { const b = $('#banner'); b.className = 'banner' + (isErr ? ' err' : ''); b.textContent = msg; b.hidden = false; }
+  let toastTimer;
+  function toast(html, ms = 2600) {
+    const t = $('#toast'); t.innerHTML = html; t.hidden = false;
+    clearTimeout(toastTimer); if (ms) toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  }
+  $('#toast').addEventListener('click', e => { if (e.target.dataset.close != null) $('#toast').hidden = true; });
+
+  // ---------- derived ----------
+  const proj = id => state.projects.find(p => p.id === id);
+  const pcolor = p => p ? `var(${PCOLORS[(p.order ?? 5) % PCOLORS.length]})` : 'var(--p6)';
+  const open = () => state.items.filter(i => !i.done && (state.filter === 'all' || i.project === state.filter));
+  const byDue = (a, b) => (a.due || '9999') .localeCompare(b.due || '9999') || (a.createdDay || '').localeCompare(b.createdDay || '');
+  const ageOf = it => it.createdDay ? -diffDays(it.createdDay) : 0;
+
+  function buckets() {
+    const t = todayISO(), wk = addDays(7);
+    const o = open();
+    return {
+      chase: o.filter(i => i.kind === 'waiting' && i.due && i.due <= t).sort(byDue),
+      overdue: o.filter(i => i.kind === 'task' && i.due && i.due <= t).sort(byDue),
+      replies: o.filter(i => i.kind === 'reply').sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || ageOf(b) - ageOf(a)),
+      soon: o.filter(i => (i.kind === 'task' || i.kind === 'waiting') && i.due && i.due > t && i.due <= wk).sort(byDue),
+      undated: o.filter(i => i.kind === 'task' && !i.due).sort(byDue),
+    };
+  }
+
+  function statusPill(it) {
+    if (it.done || it.kind === 'note') return '';
+    if (!it.due) {
+      if (it.kind === 'reply') { const a = ageOf(it); return a >= 2 ? `<span class="pill warn">${a} days unanswered</span>` : `<span class="pill">${a ? 'since yesterday' : 'new today'}</span>`; }
+      return '<span class="pill">no date</span>';
+    }
+    const d = diffDays(it.due);
+    if (d < 0) return `<span class="pill bad">${it.kind === 'waiting' ? plural(-d, 'day') + ' late' : 'overdue ' + plural(-d, 'day')}</span>`;
+    if (d === 0) return '<span class="pill warn">today</span>';
+    if (d === 1) return '<span class="pill soon">tomorrow</span>';
+    return `<span class="pill${d <= 7 ? ' soon' : ''}">${fmt(it.due)}</span>`;
+  }
+
+  // ---------- render ----------
+  function renderItem(it) {
+    const p = proj(it.project);
+    if (state.editing === it.id) return `<li>${renderEditor(it)}</li>`;
+    const who = it.who ? (it.kind === 'waiting' ? `from <b>${esc(it.who)}</b>` : it.kind === 'reply' ? `to <b>${esc(it.who)}</b>` : esc(it.who)) : '';
+    const promised = it.kind === 'waiting' && it.due ? `promised ${fmt(it.due)}` : '';
+    const chased = it.chasedOn ? `chased ${fmt(it.chasedOn)}` : '';
+    const acts = it.done
+      ? `<button data-act="undo">Reopen</button><button data-act="del">${state.confirmDel === it.id ? 'Confirm delete' : 'Delete'}</button>`
+      : [
+        it.kind === 'waiting' ? '<button class="strong" data-act="chase">Copy chaser</button>' : '',
+        it.kind !== 'note' ? '<button data-act="snooze1">+1 day</button><button data-act="snooze7">+1 wk</button>' : '',
+        '<button data-act="edit">Edit</button>',
+      ].join('');
+    return `<li><div class="item${it.done ? ' done' : ''}" data-id="${esc(it.id)}">
+      <input type="checkbox" class="check" data-act="toggle" ${it.done ? 'checked' : ''} aria-label="Mark done">
+      <div class="body">
+        <div class="title" data-act="edit">${esc(it.title)}</div>
+        <div class="meta">
+          <span class="kind">${KIND[it.kind]?.label || ''}</span>
+          ${p ? `<span class="pdot" style="--pc:${pcolor(p)}">${esc(p.name)}</span>` : ''}
+          ${who ? `<span>${who}</span>` : ''}
+          ${promised ? `<span>${promised}</span>` : ''}
+          ${chased ? `<span>${chased}</span>` : ''}
+          ${statusPill(it)}
+        </div>
+        ${it.notes ? `<div class="notes">${esc(it.notes)}</div>` : ''}
+      </div>
+      <div class="acts">${acts}</div>
+    </div></li>`;
+  }
+
+  function projOptions(sel) {
+    return state.projects.slice().sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
+      .map(p => `<option value="${esc(p.id)}"${p.id === sel ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+  }
+
+  function renderEditor(it) {
+    return `<form class="editor" data-id="${esc(it.id)}" data-form="edit">
+      <div class="row">
+        <input type="text" name="title" value="${esc(it.title)}" aria-label="Title" required>
+      </div>
+      <div class="row">
+        <select name="kind" aria-label="Kind">${Object.entries(KIND).map(([k, v]) => `<option value="${k}"${k === it.kind ? ' selected' : ''}>${v.label}</option>`).join('')}</select>
+        <select name="project" aria-label="Project">${projOptions(it.project)}</select>
+        <input type="text" name="who" value="${esc(it.who || '')}" placeholder="Person" aria-label="Person">
+        <input type="date" name="due" value="${esc(it.due || '')}" aria-label="Date">
+      </div>
+      <textarea name="notes" placeholder="Notes: what exactly was promised, links, phone call context…" aria-label="Notes">${esc(it.notes || '')}</textarea>
+      <div class="row" style="justify-content: space-between">
+        <button type="button" class="btn ${state.confirmDel === it.id ? 'danger' : 'ghost'}" data-act="del">${state.confirmDel === it.id ? 'Tap again to delete' : 'Delete'}</button>
+        <div class="row"><button type="button" class="btn ghost" data-act="cancel">Cancel</button><button class="btn" type="submit">Save</button></div>
+      </div>
+    </form>`;
+  }
+
+  function group(title, sub, list, emptyText) {
+    if (!list.length && !emptyText) return '';
+    return `<section class="group">
+      <div class="group-h"><h2>${title}</h2><span class="n">${list.length}</span>${sub ? `<p>${sub}</p>` : ''}</div>
+      ${list.length ? `<ul class="items">${list.map(renderItem).join('')}</ul>` : `<div class="empty">${emptyText}</div>`}
+    </section>`;
+  }
+
+  function renderToday() {
+    const b = buckets();
+    const any = b.chase.length + b.overdue.length + b.replies.length + b.soon.length + b.undated.length;
+    if (!any) return `<div class="empty">Nothing waiting on you${state.filter !== 'all' ? ' in this project' : ''}. Add anything you don't want to forget using the box above: a task, a promise someone made you, or an email you'll answer later.</div>`;
+    return `<div style="display:grid;gap:22px">
+      ${group('Chase now', 'They promised it and the date has passed.', b.chase)}
+      ${group('Due or overdue', '', b.overdue)}
+      ${group('Replies owed', 'Emails you saw and meant to answer.', b.replies)}
+      ${group('Next 7 days', '', b.soon)}
+      ${group('No date yet', 'Give these a date so they surface on time.', b.undated)}
+    </div>`;
+  }
+
+  function renderKind(kind, emptyText) {
+    const list = open().filter(i => i.kind === kind).sort(byDue);
+    return group(KIND[kind].label, '', list, emptyText);
+  }
+
+  function renderProjects() {
+    const ps = state.projects.slice().sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+    const cards = ps.map(p => {
+      const its = state.items.filter(i => i.project === p.id && !i.done).sort(byDue);
+      const counts = ['task', 'waiting', 'reply'].map(k => [k, its.filter(i => i.kind === k).length]).filter(([, n]) => n)
+        .map(([k, n]) => `${n} ${KIND[k].label.toLowerCase()}`).join(' · ') || 'nothing open';
+      return `<article class="proj" style="--pc:${pcolor(p)}" data-pid="${esc(p.id)}">
+        <div class="row" style="justify-content:space-between">
+          <h3>${esc(p.name)}</h3><span class="stat">${counts}</span>
+        </div>
+        ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ''}
+        <div>
+          <div class="row" style="justify-content:space-between"><span class="label">Details to remember</span><span class="saved" data-saved="${esc(p.id)}"></span></div>
+          <textarea id="pnotes-${esc(p.id)}" data-pnotes="${esc(p.id)}" placeholder="Dates, venues, contacts, what was agreed on calls, decisions…">${esc(p.notes || '')}</textarea>
+        </div>
+        ${its.length ? `<ul class="items">${its.map(renderItem).join('')}</ul>` : ''}
+        <div class="row"><button class="btn ghost" data-addto="${esc(p.id)}">Add item to ${esc(p.name)}</button></div>
+      </article>`;
+    }).join('');
+    return `<div class="projects">${cards || '<div class="empty">No projects yet.</div>'}
+      <form class="capture" data-form="project">
+        <span class="label">New project</span>
+        <div class="row"><input name="name" placeholder="Project name" required style="flex:1 1 200px"><input name="description" placeholder="One line on what it is" style="flex:2 1 240px"><button class="btn" type="submit">Add project</button></div>
+      </form></div>`;
+  }
+
+  function renderDone() {
+    const list = state.items.filter(i => i.done && (state.filter === 'all' || i.project === state.filter))
+      .sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || '')).slice(0, 50);
+    return group('Done', 'Most recent first.', list, 'Finished items land here, so you can reopen one if it comes back.');
+  }
+
+  function render() {
+    $('#today').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const b = buckets();
+    if (state.ready) {
+      const parts = [];
+      if (b.chase.length) parts.push(`<b>${plural(b.chase.length, 'thing')}</b> to chase`);
+      if (b.overdue.length) parts.push(`<b>${b.overdue.length}</b> due or overdue`);
+      if (b.replies.length) parts.push(`<b>${plural(b.replies.length, 'reply')}</b> owed`.replace('replys', 'replies'));
+      $('#summary').innerHTML = parts.length ? parts.join(' · ') : 'All clear for today.';
+    }
+    const allOpen = state.items.filter(i => !i.done);
+    const count = k => allOpen.filter(i => i.kind === k).length;
+    const tabs = [
+      ['today', 'Today', b.chase.length + b.overdue.length + b.replies.length],
+      ['waiting', 'Waiting on', count('waiting')],
+      ['reply', 'Replies', count('reply')],
+      ['task', 'To do', count('task')],
+      ['projects', 'Projects', state.projects.length],
+      ['done', 'Done', null],
+    ];
+    $('#tabs').innerHTML = tabs.map(([k, l, n]) => `<button role="tab" data-tab="${k}" aria-selected="${state.tab === k}">${l}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
+    $('#filters').hidden = state.tab === 'projects';
+    $('#filters').innerHTML = `<button class="chip" data-filter="all" aria-pressed="${state.filter === 'all'}">All projects</button>` +
+      state.projects.slice().sort((a, c) => (a.order ?? 99) - (c.order ?? 99)).map(p => `<button class="chip" data-filter="${esc(p.id)}" aria-pressed="${state.filter === p.id}">${esc(p.name)}</button>`).join('');
+    const sel = $('#c-project'); const cur = sel.value;
+    sel.innerHTML = projOptions(cur || (state.filter !== 'all' ? state.filter : ''));
+    if (!state.ready) { $('#view').innerHTML = '<div class="empty">Opening your list…</div>'; return; }
+
+    // keep focus/typing in a project notes box across live re-renders
+    const active = document.activeElement;
+    const keepNotes = active && active.dataset && active.dataset.pnotes;
+    if (keepNotes && state.tab === 'projects') return;
+
+    const v = {
+      today: renderToday,
+      waiting: () => renderKind('waiting', 'Nobody owes you anything right now. When someone promises a deliverable (on a call, in a meeting), add it here with the date they gave.'),
+      reply: () => renderKind('reply', 'No replies owed. When you read an email you mean to answer later, add one line here so it stays visible.'),
+      task: () => renderKind('task', 'No open tasks.'),
+      projects: renderProjects,
+      done: renderDone,
+    }[state.tab];
+    $('#view').innerHTML = v();
+  }
+
+  // ---------- capture ----------
+  function setKind(k) {
+    state.kind = k;
+    document.querySelectorAll('.kinds button').forEach(b => b.setAttribute('aria-pressed', b.dataset.kind === k));
+    $('#c-title').placeholder = KIND[k].ph;
+    $('#c-hint').textContent = KIND[k].hint;
+    $('#c-who').hidden = !(k === 'waiting' || k === 'reply');
+    $('#c-who').placeholder = k === 'waiting' ? 'Who promised it?' : 'Who is the email from?';
+    $('#c-due').hidden = k === 'note';
+    $('#quick').hidden = k === 'note';
+  }
+  document.querySelector('.kinds').addEventListener('click', e => { const k = e.target.dataset.kind; if (k) setKind(k); });
+  $('#quick').addEventListener('click', e => {
+    const q = e.target.dataset.q; if (q == null) return;
+    $('#c-due').value = q === 'none' ? '' : q === 'fri' ? nextFriday() : addDays(+q);
+  });
+  $('#capture').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!backend) return;
+    const title = $('#c-title').value.trim(); if (!title) return;
+    const k = state.kind;
+    const data = {
+      kind: k, title, project: $('#c-project').value || '',
+      who: (k === 'waiting' || k === 'reply') ? $('#c-who').value.trim() : '',
+      due: k === 'note' ? '' : $('#c-due').value,
+      notes: '', done: false, created: new Date().toISOString(), createdDay: todayISO(),
+    };
+    write(() => backend.add('items', data));
+    $('#c-title').value = ''; $('#c-who').value = ''; $('#c-due').value = '';
+    toast(`Added to ${KIND[k].label}.`);
+    $('#c-title').focus();
+  });
+
+  // ---------- list interactions ----------
+  document.addEventListener('click', async e => {
+    const t = e.target.closest('[data-tab],[data-filter],[data-act],[data-addto]');
+    if (!t) return;
+    if (t.dataset.tab) { state.tab = t.dataset.tab; state.editing = null; render(); return; }
+    if (t.dataset.filter) { state.filter = t.dataset.filter; render(); return; }
+    if (t.dataset.addto) {
+      $('#c-project').value = t.dataset.addto; $('#c-title').focus(); window.scrollTo({ top: 0 }); return;
+    }
+    const host = t.closest('[data-id]'); if (!host) return;
+    const id = host.dataset.id; const it = state.items.find(i => i.id === id); if (!it) return;
+    const act = t.dataset.act;
+    if (act === 'toggle' || act === 'undo') {
+      const done = act === 'undo' ? false : t.checked;
+      write(() => backend.update('items', id, { done, doneAt: done ? new Date().toISOString() : '' }));
+      if (done) toast(`Done: ${esc(it.title)}`);
+    } else if (act === 'edit') { state.editing = id; state.confirmDel = null; render(); }
+    else if (act === 'cancel') { state.editing = null; state.confirmDel = null; render(); }
+    else if (act === 'del') {
+      if (state.confirmDel === id) { state.confirmDel = null; state.editing = null; write(() => backend.remove('items', id)); toast('Deleted.'); }
+      else { state.confirmDel = id; render(); }
+    }
+    else if (act === 'snooze1' || act === 'snooze7') {
+      const n = act === 'snooze1' ? 1 : 7;
+      const base = it.due && it.due > todayISO() ? it.due : todayISO();
+      const due = addDays(n, base);
+      write(() => backend.update('items', id, { due }));
+      toast(`Moved to ${fmt(due)}.`);
+    }
+    else if (act === 'chase') {
+      const msg = `Hi ${it.who || 'there'}, just following up on ${it.title}${it.due ? `, which we'd expected by ${fmt(it.due)}` : ''}. Could you send it over, or let me know when I can expect it? Thanks.`;
+      let copied = false;
+      try { await navigator.clipboard.writeText(msg); copied = true; } catch {}
+      const followUp = addDays(2);
+      write(() => backend.update('items', id, { chasedOn: todayISO(), due: followUp }));
+      if (copied) toast(`Chaser copied. Paste it into WhatsApp or email. I'll bring this back ${fmt(followUp)} if it still hasn't arrived.`, 5000);
+      else toast(`Copy this message, then I'll bring it back ${fmt(followUp)}:<textarea readonly>${esc(msg)}</textarea><button class="btn ghost" data-close>Close</button>`, 0);
+    }
+  });
+
+  document.addEventListener('submit', e => {
+    const f = e.target;
+    if (f.dataset.form === 'edit') {
+      e.preventDefault();
+      const fd = new FormData(f); const id = f.dataset.id;
+      const data = { title: fd.get('title').trim(), kind: fd.get('kind'), project: fd.get('project') || '', who: fd.get('who').trim(), due: fd.get('due') || '', notes: fd.get('notes').trim() };
+      state.editing = null; state.confirmDel = null;
+      write(() => backend.update('items', id, data)); render();
+    } else if (f.dataset.form === 'project') {
+      e.preventDefault();
+      const fd = new FormData(f); const name = fd.get('name').trim(); if (!name) return;
+      const order = state.projects.reduce((m, p) => Math.max(m, p.order ?? 0), -1) + 1;
+      write(() => backend.add('projects', { name, description: fd.get('description').trim(), notes: '', order }));
+      f.reset();
+    }
+  });
+
+  // project notes: save when the box loses focus, only if changed
+  document.addEventListener('focusout', e => {
+    const id = e.target.dataset && e.target.dataset.pnotes; if (!id) return;
+    const p = proj(id); const val = e.target.value;
+    if (p && (p.notes || '') !== val) {
+      write(async () => { await backend.update('projects', id, { notes: val }); const s = document.querySelector(`[data-saved="${CSS.escape(id)}"]`); if (s) s.textContent = 'Saved'; });
+    }
+  });
+
+  // ---------- boot ----------
+  setKind('task');
+  render();
+  function start(b) {
+    backend = b;
+    let gotItems = false, gotProjects = false;
+    const done = () => { if (gotItems && gotProjects) { state.ready = true; render(); } };
+    b.sub('items', list => { state.items = list; gotItems = true; done(); });
+    b.sub('projects', list => {
+      state.projects = list; gotProjects = true;
+      if (b.kind === 'local' && !list.length) b.add('projects', { name: 'General', description: '', notes: '', order: 0 });
+      done();
+    });
+  }
+  (async () => {
+    let db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch { db = null; }
+    if (db) start(dbBackend(db));
+    else { showBanner('Saving to this browser only. Open the claude.ai link to keep your list in sync across phone and laptop.'); start(localBackend()); }
+  })();
+  // re-evaluate "today" when the page comes back into view on a new day
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && state.ready) render(); });
+})();
+</script>
