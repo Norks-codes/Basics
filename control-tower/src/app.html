@@ -1,0 +1,945 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Control Tower</title>
+<style>
+  :root{
+    --bg:#f3f5f4; --panel:#ffffff; --ink:#14231c; --muted:#5b6b63; --line:#dfe5e2;
+    --brand:#0d5c3d; --brand2:#e3b23c; --accent:#0d6e8a; --chip:#eef2f0;
+    --red:#b42318; --redbg:#fde8e7; --amber:#9a6200; --amberbg:#fff3d6; --green:#0a7a4b; --greenbg:#e3f5ec;
+    --grey:#8a948f; --greybg:#f0f1f1;
+    --shadow:0 1px 2px rgba(10,30,20,.06),0 4px 16px rgba(10,30,20,.05);
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --bg:#0f1513; --panel:#17201c; --ink:#e7eeea; --muted:#9db0a6; --line:#26332d;
+    --brand:#5fc79a; --brand2:#f0c55a; --accent:#5cc8e6; --chip:#1f2a25;
+    --red:#ff8a80; --redbg:#3a1d1b; --amber:#f5c25b; --amberbg:#352a12; --green:#6fdba6; --greenbg:#15302a;
+    --grey:#7f8a85; --greybg:#1c2320;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.3);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0f1513; --panel:#17201c; --ink:#e7eeea; --muted:#9db0a6; --line:#26332d;
+    --brand:#5fc79a; --brand2:#f0c55a; --accent:#5cc8e6; --chip:#1f2a25;
+    --red:#ff8a80; --redbg:#3a1d1b; --amber:#f5c25b; --amberbg:#352a12; --green:#6fdba6; --greenbg:#15302a;
+    --grey:#7f8a85; --greybg:#1c2320;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent)}
+  header{background:#0d5c3d;color:#fff;padding:14px 16px}
+  header .wrap{max-width:1180px;margin:0 auto;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px;letter-spacing:.2px}
+  header h1 span{color:#f0c55a}
+  header .sub{font-size:13px;opacity:.85}
+  main{max-width:1180px;margin:0 auto;padding:12px 16px 80px}
+  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
+  nav.tabs button{background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:8px 13px;border-radius:999px;cursor:pointer;font:inherit;font-size:14px}
+  nav.tabs button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  :root[data-theme="dark"] nav.tabs button.on{color:#0f1513}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) nav.tabs button.on{color:#0f1513}}
+  nav.tabs .count{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:9px;background:var(--red);color:#fff;font-size:11.5px;line-height:18px;text-align:center}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);margin-bottom:14px}
+  .card h2{margin:0 0 4px;font-size:16px}
+  .card h3{margin:14px 0 6px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .card .why{color:var(--muted);font-size:13px;margin:0 0 10px}
+  .grid{display:grid;gap:14px}
+  @media(min-width:900px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+  .hero{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:baseline}
+  .hero .big{font-size:22px;font-weight:650}
+  .hero .muted{color:var(--muted)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0 0}
+  .tile{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);cursor:pointer;text-align:left;font:inherit;color:inherit}
+  .tile:hover{border-color:var(--accent)}
+  .tile .n{font-size:24px;font-weight:700;line-height:1.1}
+  .tile .l{font-size:12.5px;color:var(--muted)}
+  .tile.red .n{color:var(--red)} .tile.amber .n{color:var(--amber)} .tile.green .n{color:var(--green)}
+  ul.list{list-style:none;margin:0;padding:0}
+  ul.list li{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line)}
+  ul.list li:first-child{border-top:0}
+  ul.list .body{flex:1;min-width:0}
+  ul.list .t{font-weight:560}
+  ul.list .m{color:var(--muted);font-size:13px}
+  ul.list .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:999px;background:var(--chip);color:var(--muted);margin:2px 4px 0 0;white-space:nowrap}
+  .tag.red{background:var(--redbg);color:var(--red)} .tag.amber{background:var(--amberbg);color:var(--amber)}
+  .tag.green{background:var(--greenbg);color:var(--green)} .tag.info{background:var(--chip);color:var(--muted)}
+  .tag.crit{background:var(--brand2);color:#3a2a00}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none;margin-top:6px;background:var(--grey)}
+  .dot.red{background:var(--red)} .dot.amber{background:var(--amber)} .dot.green{background:var(--green)} .dot.blue{background:var(--accent)}
+  button.b{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:5px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
+  button.b:hover{border-color:var(--accent)}
+  button.b.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  :root[data-theme="dark"] button.b.primary{color:#0f1513}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.b.primary{color:#0f1513}}
+  button.b.ghost{border-color:transparent;background:transparent;color:var(--accent)}
+  input[type=checkbox]{width:18px;height:18px;margin-top:3px;flex:none;accent-color:var(--brand)}
+  .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .filters input,.filters select,.form input,.form select,.form textarea,textarea.msg{font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+  .filters input[type=search]{flex:1;min-width:180px}
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;background:var(--panel)}
+  th,td{padding:7px 9px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+  th{font-size:12px;color:var(--muted);font-weight:600;background:var(--chip);position:sticky;top:0;white-space:nowrap}
+  tr.r td{background:var(--redbg)} tr.a td{background:var(--amberbg)} tr.g td{color:var(--grey)}
+  tbody tr{cursor:pointer} tbody tr:hover td{outline:1px solid var(--line)}
+  td.id{color:var(--muted);white-space:nowrap} td.nowrap{white-space:nowrap}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+  .chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:4px 10px;border-radius:999px;cursor:pointer}
+  .chip.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+  .funnel{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+  .funnel div{background:var(--chip);border-radius:8px;padding:6px 10px;font-size:13px}
+  .funnel b{font-size:16px;margin-right:4px}
+  .health{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .health .h{border:1px solid var(--line);border-left:5px solid var(--grey);border-radius:10px;padding:9px 11px;cursor:pointer}
+  .health .h.red{border-left-color:var(--red)} .health .h.amber{border-left-color:var(--amber)} .health .h.green{border-left-color:var(--green)}
+  .health .h .n{font-weight:600} .health .h .m{font-size:12.5px;color:var(--muted)}
+  .timeline{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+  .ms{min-width:150px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;background:var(--panel)}
+  .ms .d{font-weight:650} .ms.past{opacity:.55} .ms.next{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand) inset}
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;color:var(--muted);cursor:pointer}
+  .drop.over{border-color:var(--brand);background:var(--greenbg)}
+  .drop strong{color:var(--ink);font-size:16px;display:block;margin-bottom:4px}
+  textarea.msg{width:100%;min-height:260px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.45}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .spacer{flex:1}
+  .muted{color:var(--muted)} .small{font-size:12.5px}
+  .empty{color:var(--muted);font-size:14px;padding:6px 0}
+  dialog{border:0;border-radius:14px;padding:0;max-width:680px;width:calc(100% - 24px);background:var(--panel);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  dialog::backdrop{background:rgba(10,20,15,.45)}
+  dialog .dh{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  dialog .dh h2{margin:0;font-size:16px;flex:1}
+  dialog .db{padding:14px 18px;max-height:70vh;overflow:auto}
+  dialog .df{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .form{display:grid;grid-template-columns:1fr;gap:10px}
+  @media(min-width:620px){.form{grid-template-columns:1fr 1fr}.form .full{grid-column:1/-1}}
+  .form label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}
+  .form textarea{min-height:64px;resize:vertical}
+  .chg{border-top:1px solid var(--line);padding:8px 0;display:flex;gap:10px}
+  .chg:first-child{border-top:0}
+  .chg .f{font-size:13px} .chg del{color:var(--red)} .chg ins{color:var(--green);text-decoration:none}
+  #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;max-width:90vw}
+  #toast.show{opacity:1}
+  .rules li{margin:5px 0}
+  .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:var(--chip);padding:1px 5px;border-radius:5px}
+  @media print{nav.tabs,header,.acts,button{display:none!important}.card{box-shadow:none}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>Project <span>Control Tower</span></h1><div class="sub" id="hdrSub">Your tracker, checked every morning.</div></div></header>
+<main>
+  <nav class="tabs" id="tabs"></nav>
+  <div id="view"></div>
+</main>
+<dialog id="dlg"><div class="dh"><h2 id="dlgTitle"></h2><button class="b ghost" data-close>Close</button></div><div class="db" id="dlgBody"></div><div class="df" id="dlgFoot"></div></dialog>
+<input type="file" id="fileIn" accept=".xlsx,.json" hidden>
+<div id="toast"></div>
+
+<!--JSZIP-->
+
+<script>
+'use strict';
+/* ==========================================================================
+   Project Control Tower — a single-file companion to the Excel tracker.
+   Data lives only in this browser (localStorage) and in the Excel file you
+   load. Nothing is sent anywhere: there are no network calls in this file.
+   ========================================================================== */
+
+const KEY = 'controlTower.v1';
+const DAY = 86400000;
+
+/* ---------- Sheet schema: maps Excel headers (row 1) to fields ---------- */
+const SCHEMA = {
+  tracker: { sheet:'Tracker', label:'Tracker', title:'item', fields:{
+    id:'ID', item:'Item', type:'Type', part:'Action Plan part', owner:'Owner', next:'Next step',
+    due:'Due date', status:'Status', overdue:'Days overdue', updated:'Last updated', notes:'Notes and links' },
+    dates:['due','updated'], nums:['id'], skip:['overdue'] },
+  interviews: { sheet:'Interviews', label:'Interviews', title:'name', fields:{
+    id:'#', name:'Interviewee', org:'Organisation', pathway:'Pathway', route:'Route and owner', stage:'Stage',
+    date:'Interview date', brief:'Brief done', writeup:'Write-up done', next:'Next step', notes:'Notes' },
+    dates:['date'], nums:['id'], skip:[] },
+  sessions: { sheet:'Sessions', label:'Sessions', title:'session', fields:{
+    id:'#', session:'Session', type:'Type', hub:'Hub or department', country:'Country', by:'Convened by',
+    status:'Status', date:'Date', writeup:'Write-up done', notes:'Notes' },
+    dates:['date'], nums:['id'], skip:[] },
+  plan: { sheet:'Plan', label:'Plan', title:'task', fields:{
+    id:'ID', date:'Date', week:'Week', who:'Who', task:'Task', done:'Done', notes:'Notes' },
+    dates:['date'], nums:['id'], skip:[] },
+};
+const KINDS = Object.keys(SCHEMA);
+const CLOSED = ['Done','Dropped'];
+const DEFAULT_LISTS = {
+  owners:['Miriam','Delali','Salia','Michael'], types:['Bank data request','Management decision','Abidjan preparation','Position Paper','Action Plan','Consultation','Big Win comment','Risk'],
+  status:['To confirm','Not started','In progress','Waiting on others','Done','Dropped'],
+  parts:['1 Opening position','2 Route to 100M','3 Validated pathways','4 Investable pipeline','5 Delivery contributions','6 Jobs estimates','7 Inclusion','8 Partnerships and mobilisation','9 Delivery and verification','Position Paper','Several'],
+  stages:['Not contacted','Introduction requested','Introduction made','Scheduled','Held','Write-up done','Dropped'],
+  sessionStatus:['Not requested','Requested','Scheduled','Held','Write-up done','Cancelled'] };
+const LIST_HEADERS = { owners:'Owners', types:'Types', status:'Status', parts:'Parts', stages:'Stages', sessionStatus:'SessionStatus' };
+
+function blank(){
+  return { v:1, tracker:[], interviews:[], sessions:[], plan:[], lists:structuredClone(DEFAULT_LISTS),
+    notes:[], history:[], file:null,
+    settings:{ me:'Miriam', keeper:'Delali', team:['Delali','Salia'], soonDays:2, staleDays:3, interviewTarget:10, rmcTarget:16 },
+    ui:{ tab:'today', person:'Delali', tf:{ q:'', status:'open', type:'', part:'', owner:'', flag:'' }, planWho:'', planShowDone:false } };
+}
+let S = load();
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.v===1){ const b=blank(); return {...b, ...s, settings:{...b.settings,...s.settings}, ui:{...b.ui,...s.ui, tf:{...b.ui.tf,...(s.ui||{}).tf}}}; } }catch(e){}
+  return blank();
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ toast('This browser would not save your changes ('+e.name+'). Download a backup from the Data tab.'); }
+}
+
+/* ---------- Dates ---------- */
+const qsToday = new URLSearchParams(location.search).get('today');
+const TODAY = /^\d{4}-\d{2}-\d{2}$/.test(qsToday||'') ? qsToday : isoLocal(new Date());
+function isoLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function toUTC(iso){ const [y,m,d]=iso.split('-').map(Number); return Date.UTC(y,m-1,d); }
+function addDays(iso,n){ return new Date(toUTC(iso)+n*DAY).toISOString().slice(0,10); }
+function diff(a,b){ return Math.round((toUTC(a)-toUTC(b))/DAY); } // a - b in days
+function dow(iso){ return new Date(toUTC(iso)).getUTCDay(); }
+function addWorkdays(iso,n){ let d=iso; while(n>0){ d=addDays(d,1); if(dow(d)%6!==0) n--; } return d; }
+function workdaysBetween(a,b){ let n=0,d=a; while(d<b){ d=addDays(d,1); if(dow(d)%6!==0) n++; } return n; }
+function nextWorkday(iso){ return addWorkdays(iso,1); }
+const WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmt(iso,withDay=true){ if(!iso) return ''; const d=new Date(toUTC(iso)); return (withDay?WD[d.getUTCDay()]+' ':'')+d.getUTCDate()+' '+MO[d.getUTCMonth()]; }
+function rel(iso){
+  if(!iso) return ''; const n=diff(iso,TODAY);
+  if(n===0) return 'today'; if(n===1) return 'tomorrow'; if(n===-1) return 'yesterday';
+  return n>0 ? 'in '+n+' days' : n*-1+' days ago';
+}
+function serialToISO(n){ return new Date(Math.round((n-25569)*DAY)).toISOString().slice(0,10); }
+function isoToSerial(iso){ return toUTC(iso)/DAY+25569; }
+function parseDateText(s){
+  s=String(s).trim(); if(!s) return '';
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[1]+'-'+m[2]+'-'+m[3];
+  m=s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})$/); if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m=s.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})$/); if(m){ const i=MO.findIndex(x=>x.toLowerCase()===m[2].toLowerCase()); if(i>=0) return m[3]+'-'+String(i+1).padStart(2,'0')+'-'+m[1].padStart(2,'0'); }
+  return s;
+}
+
+/* ---------- Small helpers ---------- */
+const $ = s => document.querySelector(s);
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
+function keyOf(r){ return r.id ? 'id:'+r.id : 'row:'+r._row; }
+function title(kind,r){ return r[SCHEMA[kind].title] || '(untitled)'; }
+function firstName(s){ return String(s||'').replace(/\(.*?\)/g,'').split(/[,;/]/)[0].trim(); }
+async function copy(text){
+  try{ await navigator.clipboard.writeText(text); toast('Copied. Paste it into Teams, WhatsApp or email.'); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); toast('Copied.');}catch(_){toast('Select the text and copy it manually.');} ta.remove(); }
+}
+function bufToB64(u8){ let s=''; for(let i=0;i<u8.length;i+=0x8000) s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000)); return btoa(s); }
+function b64ToBuf(b){ const s=atob(b), u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+function download(name, data, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
+
+/* ==========================================================================
+   Excel reading and writing (direct XML, so the workbook's colours,
+   dropdowns, formulas and Summary tab are kept exactly as they were)
+   ========================================================================== */
+const XNS='http://www.w3.org/XML/1998/namespace';
+function parseXml(s){ const d=new DOMParser().parseFromString(s,'application/xml'); if(d.getElementsByTagName('parsererror').length) throw new Error('Could not read part of the workbook'); return d; }
+function serializeXml(doc){ let s=new XMLSerializer().serializeToString(doc); if(!s.startsWith('<?xml')) s='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+s; return s; }
+function kids(el,name){ const out=[]; for(const c of el.children) if(c.localName===name) out.push(c); return out; }
+function textOf(el){ let s=''; for(const t of el.getElementsByTagName('t')){ if(t.parentNode && t.parentNode.localName==='rPh') continue; s+=t.textContent; } return s; }
+function colOfRef(ref){ return ref.replace(/\d+/g,''); }
+function colNum(c){ let n=0; for(const ch of c) n=n*26+ch.charCodeAt(0)-64; return n; }
+
+async function openWorkbook(buf){
+  if(typeof JSZip==='undefined') throw new Error('The Excel reader did not load. Re-download index.html.');
+  const zip=await JSZip.loadAsync(buf);
+  const wbf=zip.file('xl/workbook.xml'); if(!wbf) throw new Error('This does not look like an .xlsx workbook.');
+  const wb=parseXml(await wbf.async('string'));
+  const rels=parseXml(await zip.file('xl/_rels/workbook.xml.rels').async('string'));
+  const relMap={}; for(const r of rels.getElementsByTagName('Relationship')) relMap[r.getAttribute('Id')]=r.getAttribute('Target');
+  const sheets={};
+  for(const s of wb.getElementsByTagName('sheet')){
+    const rid=s.getAttribute('r:id')||s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+    let t=relMap[rid]||''; t=t.startsWith('/')?t.slice(1):'xl/'+t.replace(/^\.\//,'');
+    sheets[s.getAttribute('name')]=t;
+  }
+  const ss=[]; const ssf=zip.file('xl/sharedStrings.xml');
+  if(ssf){ const d=parseXml(await ssf.async('string')); for(const si of d.getElementsByTagName('si')) ss.push(textOf(si)); }
+  return { zip, sheets, ss };
+}
+function cellRaw(c,ss){
+  if(!c) return '';
+  const t=c.getAttribute('t');
+  if(t==='inlineStr'){ const is=kids(c,'is')[0]; return is?textOf(is):''; }
+  const v=kids(c,'v')[0]; if(!v) return '';
+  const x=v.textContent;
+  if(t==='s') return ss[+x]??''; if(t==='str') return x; if(t==='e') return ''; if(t==='b') return x==='1'?'TRUE':'FALSE';
+  return x===''?'':Number(x);
+}
+function hasFormula(c){ return !!(c && kids(c,'f').length); }
+function sheetIndex(doc){
+  const rows=new Map();
+  const sd=doc.getElementsByTagName('sheetData')[0];
+  for(const r of kids(sd,'row')){ const cells=new Map(); for(const c of kids(r,'c')) cells.set(colOfRef(c.getAttribute('r')),c); rows.set(+r.getAttribute('r'),{el:r,cells}); }
+  return { sd, rows };
+}
+function headerMap(kind,idx,ss){
+  const sc=SCHEMA[kind], hdr=idx.rows.get(1); const map={};
+  if(!hdr) return map;
+  const byText={}; for(const [col,c] of hdr.cells){ const v=String(cellRaw(c,ss)).trim().toLowerCase(); if(v) byText[v]=col; }
+  for(const [f,h] of Object.entries(sc.fields)){ const col=byText[h.toLowerCase()]; if(col) map[f]=col; }
+  return map;
+}
+function normVal(kind,f,v){
+  const sc=SCHEMA[kind];
+  if(v===''||v==null) return '';
+  if(sc.dates.includes(f)) return typeof v==='number' ? serialToISO(v) : parseDateText(v);
+  if(typeof v==='number') return Number.isInteger(v) ? String(v) : String(+v.toFixed(6));
+  return String(v).trim();
+}
+function readRecords(kind,doc,ss){
+  const sc=SCHEMA[kind], idx=sheetIndex(doc), map=headerMap(kind,idx,ss);
+  if(!map[sc.title]) return { recs:null, map };
+  const recs=[];
+  for(const [rn,row] of idx.rows){
+    if(rn===1) continue;
+    const r={_row:rn};
+    for(const [f,col] of Object.entries(map)){ if(sc.skip.includes(f)) continue; r[f]=normVal(kind,f,cellRaw(row.cells.get(col),ss)); }
+    if(!r.id && !r[sc.title]) continue;
+    for(const f of Object.keys(sc.fields)) if(!sc.skip.includes(f) && r[f]===undefined) r[f]='';
+    recs.push(r);
+  }
+  return { recs, map };
+}
+function readLists(doc,ss){
+  const idx=sheetIndex(doc), hdr=idx.rows.get(1); if(!hdr) return null;
+  const out={};
+  for(const [k,h] of Object.entries(LIST_HEADERS)){
+    let col=null; for(const [c,el] of hdr.cells) if(String(cellRaw(el,ss)).trim()===h) col=c;
+    if(!col) continue; const vals=[];
+    for(const [rn,row] of idx.rows){ if(rn===1) continue; const v=String(cellRaw(row.cells.get(col),ss)).trim(); if(v) vals.push(v); }
+    if(vals.length) out[k]=vals;
+  }
+  return out;
+}
+async function parseWorkbook(buf){
+  const wb=await openWorkbook(buf); const data={ lists:null, found:[] };
+  for(const kind of KINDS){
+    const p=wb.sheets[SCHEMA[kind].sheet]; data[kind]=null;
+    if(!p || !wb.zip.file(p)) continue;
+    const { recs }=readRecords(kind, parseXml(await wb.zip.file(p).async('string')), wb.ss);
+    data[kind]=recs; if(recs) data.found.push(SCHEMA[kind].sheet);
+  }
+  const lp=wb.sheets['Lists']; if(lp && wb.zip.file(lp)) data.lists=readLists(parseXml(await wb.zip.file(lp).async('string')), wb.ss);
+  return data;
+}
+
+/* Writing values back into the stored workbook */
+function makeEl(doc,name){ return doc.createElementNS(doc.documentElement.namespaceURI,name); }
+function getRow(doc,idx,rn){
+  let r=idx.rows.get(rn); if(r) return r;
+  const el=makeEl(doc,'row'); el.setAttribute('r',rn);
+  let before=null; for(const [n,o] of idx.rows){ if(n>rn && (!before || n<+before.getAttribute('r'))) before=o.el; }
+  idx.sd.insertBefore(el,before); r={el,cells:new Map()}; idx.rows.set(rn,r); return r;
+}
+function styleAbove(idx,rn,col){ for(let n=rn-1;n>=2;n--){ const c=idx.rows.get(n)?.cells.get(col); if(c && c.getAttribute('s')) return c.getAttribute('s'); } return null; }
+function getCell(doc,idx,rn,col){
+  const row=getRow(doc,idx,rn); let c=row.cells.get(col); if(c) return c;
+  c=makeEl(doc,'c'); c.setAttribute('r',col+rn); const s=styleAbove(idx,rn,col); if(s) c.setAttribute('s',s);
+  let before=null; for(const [k,o] of row.cells){ if(colNum(k)>colNum(col) && (!before || colNum(k)<colNum(colOfRef(before.getAttribute('r'))))) before=o; }
+  row.el.insertBefore(c,before); row.cells.set(col,c); return c;
+}
+function setCell(doc,c,kind,f,val){
+  const sc=SCHEMA[kind];
+  while(c.firstChild) c.removeChild(c.firstChild); c.removeAttribute('t');
+  if(val===''||val==null) return;
+  if(sc.dates.includes(f) && /^\d{4}-\d{2}-\d{2}$/.test(val)){ const v=makeEl(doc,'v'); v.textContent=String(isoToSerial(val)); c.appendChild(v); return; }
+  if(sc.nums.includes(f) && /^\d+$/.test(val)){ const v=makeEl(doc,'v'); v.textContent=val; c.appendChild(v); return; }
+  c.setAttribute('t','inlineStr'); const is=makeEl(doc,'is'), t=makeEl(doc,'t'); t.setAttributeNS(XNS,'xml:space','preserve'); t.textContent=val; is.appendChild(t); c.appendChild(is);
+}
+async function buildExport(){
+  if(!S.file?.b64) throw new Error('Load your tracker Excel first (Data tab), so the tool has a workbook to write into.');
+  const wb=await openWorkbook(b64ToBuf(S.file.b64)); const notes=[];
+  for(const kind of KINDS){
+    const sc=SCHEMA[kind], p=wb.sheets[sc.sheet];
+    if(!p || !wb.zip.file(p)){ if(S[kind].length) notes.push('No '+sc.sheet+' tab in the workbook, so '+sc.label.toLowerCase()+' changes stay in the tool only.'); continue; }
+    const doc=parseXml(await wb.zip.file(p).async('string')), idx=sheetIndex(doc), map=headerMap(kind,idx,wb.ss);
+    if(!map[sc.title]) continue;
+    const { recs:fileRecs }=readRecords(kind,doc,wb.ss);
+    const fileByKey=new Map(fileRecs.map(r=>[keyOf(r),r])), usedRows=new Set(fileRecs.map(r=>r._row));
+    let changed=0;
+    for(const rec of S[kind]){
+      const fr=fileByKey.get(keyOf(rec));
+      let rn=fr ? fr._row : null;
+      if(!rn){ rn=2; while(usedRows.has(rn)) rn++; usedRows.add(rn); }
+      for(const [f,col] of Object.entries(map)){
+        if(sc.skip.includes(f)) continue;
+        const want=rec[f]??'', have=fr ? (fr[f]??'') : '';
+        if(fr && want===have) continue;
+        if(!fr && want==='') continue;
+        const c=getCell(doc,idx,rn,col); if(hasFormula(c)) continue;
+        setCell(doc,c,kind,f,want); changed++;
+      }
+      rec._row=rn;
+    }
+    if(changed) wb.zip.file(p, serializeXml(doc));
+  }
+  // Ask Excel to recalculate on open so the Summary tab and Days overdue are fresh.
+  const wbx=parseXml(await wb.zip.file('xl/workbook.xml').async('string'));
+  let cp=wbx.getElementsByTagName('calcPr')[0];
+  if(!cp){ cp=makeEl(wbx,'calcPr'); wbx.documentElement.appendChild(cp); }
+  cp.setAttribute('fullCalcOnLoad','1');
+  wb.zip.file('xl/workbook.xml', serializeXml(wbx));
+  const out=await wb.zip.generateAsync({type:'uint8array',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  return { out, notes };
+}
+
+/* ==========================================================================
+   Import with a "what changed" preview (three-way: base / Excel / tool)
+   ========================================================================== */
+function fieldsOf(kind){ const sc=SCHEMA[kind]; return Object.keys(sc.fields).filter(f=>!sc.skip.includes(f)); }
+function baseOf(kind,r){ const b={}; for(const f of fieldsOf(kind)) b[f]=r[f]??''; return b; }
+
+async function importBuffer(buf,name){
+  let data;
+  try{ data=await parseWorkbook(buf); }catch(e){ alert('Could not read that file: '+e.message); return; }
+  if(!data.tracker){ alert('No "Tracker" tab with an "Item" column was found in '+name+'. Is this the project tracker?'); return; }
+  const fileInfo={ name, b64:bufToB64(new Uint8Array(buf)), importedAt:Date.now() };
+  const firstTime=!S.file && !S.tracker.length;
+  const changes=[];
+  for(const kind of KINDS){
+    const incoming=data[kind]; if(!incoming) continue;
+    const mine=new Map(S[kind].map(r=>[keyOf(r),r])), seen=new Set();
+    for(const inc of incoming){
+      const k=keyOf(inc); seen.add(k); const ex=mine.get(k);
+      if(!ex){ changes.push({kind,key:k,type:'new',inc,on:true}); continue; }
+      const base=ex._base||{}, fields=[];
+      for(const f of fieldsOf(kind)){
+        const iv=inc[f]??'', ev=ex[f]??'', bv=base[f]??'';
+        if(iv===ev) continue;
+        const excelChanged = iv!==bv, toolChanged = ev!==bv;
+        if(!excelChanged) continue;           // only you changed it: keep yours
+        fields.push({f,from:ev,to:iv,conflict:toolChanged});
+      }
+      if(fields.length) changes.push({kind,key:k,type:'changed',inc,ex,fields,on:!fields.some(x=>x.conflict)});
+      else ex._row=inc._row;
+    }
+  }
+  const finish=(chosen)=>{
+    for(const ch of chosen){
+      if(ch.type==='new'){ const r={...ch.inc,_base:baseOf(ch.kind,ch.inc)}; S[ch.kind].push(r); if(!firstTime) logH(ch.kind,r,'(new)','','added','excel'); continue; }
+      for(const x of ch.fields){ logH(ch.kind,ch.ex,x.f,x.from,x.to,'excel'); ch.ex[x.f]=x.to; }
+      ch.ex._row=ch.inc._row;
+    }
+    // Refresh the base for every record the file holds, so later imports only show new edits.
+    for(const kind of KINDS){ const inc=data[kind]; if(!inc) continue; const byK=new Map(inc.map(r=>[keyOf(r),r]));
+      for(const r of S[kind]){ const i=byK.get(keyOf(r)); if(i){ r._base=baseOf(kind,i); r._row=i._row; } } }
+    if(data.lists) S.lists={...S.lists,...data.lists};
+    S.file=fileInfo; save(); render();
+    toast(firstTime ? 'Loaded '+S.tracker.length+' tracker items from '+name : 'Applied '+chosen.length+' update'+(chosen.length===1?'':'s')+' from '+name);
+  };
+  if(firstTime){ finish(changes); if(!data.plan) setTimeout(()=>toast('Tip: this workbook has no Plan tab, so the day-by-day plan is empty.'),2800); return; }
+  if(!changes.length){ finish([]); toast('No changes in '+name+'. Everything already matches.'); return; }
+  showImportPreview(name,changes,finish);
+}
+function showImportPreview(name,changes,finish){
+  const conflicts=changes.filter(c=>!c.on).length;
+  let h='<p class="why">'+changes.length+' change'+(changes.length===1?'':'s')+' found in <b>'+esc(name)+'</b> compared with the last version you loaded. Untick anything you do not want.'
+    +(conflicts?' <b>'+conflicts+'</b> '+(conflicts===1?'clashes':'clash')+' with edits you made in the tool. '+(conflicts===1?'It is':'Those are')+' unticked, so your version is kept unless you tick them.':'')+'</p>';
+  changes.forEach((c,i)=>{
+    const t=title(c.kind,c.inc);
+    h+='<div class="chg"><input type="checkbox" data-i="'+i+'" '+(c.on?'checked':'')+'><div class="f"><b>'+esc(SCHEMA[c.kind].label)+' #'+esc(c.inc.id||'?')+'</b> '+esc(t)
+      +(c.type==='new'?' <span class="tag green">new</span>':'')
+      +(c.fields||[]).map(x=>'<div>'+esc(SCHEMA[c.kind].fields[x.f])+': <del>'+esc(shown(c.kind,x.f,x.from)||'(blank)')+'</del> → <ins>'+esc(shown(c.kind,x.f,x.to)||'(blank)')+'</ins>'+(x.conflict?' <span class="tag amber">you changed this in the tool</span>':'')+'</div>').join('')
+      +'</div></div>';
+  });
+  openDlg('Updates from Excel', h, [
+    ['Cancel',()=>closeDlg()],
+    ['Apply ticked updates',()=>{ const chosen=[...$('#dlgBody').querySelectorAll('input[data-i]')].filter(x=>x.checked).map(x=>changes[+x.dataset.i]); closeDlg(); finish(chosen); },'primary'] ]);
+}
+function shown(kind,f,v){ return v && SCHEMA[kind]?.dates.includes(f) && /^\d{4}-\d{2}-\d{2}$/.test(v) ? fmt(v) : v; }
+function logH(kind,r,f,from,to,src){
+  S.history.push({ t:Date.now(), d:TODAY, kind, id:r.id, title:title(kind,r), f, from, to, src });
+  if(S.history.length>3000) S.history.splice(0,S.history.length-3000);
+}
+function setField(kind,r,f,val){
+  val=val??''; if((r[f]??'')===val) return false;
+  logH(kind,r,f,r[f]??'',val,'tool'); r[f]=val; r._edited=Date.now();
+  if(kind==='tracker' && f!=='updated' && r.updated!==TODAY){ logH(kind,r,'updated',r.updated||'',TODAY,'tool'); r.updated=TODAY; }
+  return true;
+}
+
+/* ==========================================================================
+   The checks: what might be missed. Each returns {lvl, text}.
+   ========================================================================== */
+function people(){
+  const s=new Set([S.settings.me, S.settings.keeper, ...S.settings.team]);
+  for(const o of S.lists.owners||[]) { const n=firstName(o); if(n && !/^bank$/i.test(n)) s.add(n); }
+  return [...s].filter(Boolean);
+}
+function actors(r){ // who must act next, from Owner and Next step
+  const out=new Set(); const o=firstName(r.owner); if(o) out.add(o);
+  const nx=r.next||'';
+  for(const p of people()){ const re=new RegExp('\\b'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s+(to|drafts|sends|prepares|chases|reviews|confirms|asks|agrees)\\b','i'); if(re.test(nx)) out.add(p); }
+  return [...out];
+}
+const isOpen = r => !CLOSED.includes(r.status);
+const bankOwes = r => /bank/i.test(r.owner||'');
+const vagueOwner = r => !r.owner || /to confirm|several|tbd|\?|^bank$/i.test(r.owner);
+const yes = v => /^(yes|y|true|done|✓)$/i.test(String(v||'').trim());
+
+function trackerFlags(r){
+  const f=[]; if(!isOpen(r)) return f;
+  if(r.due){ const n=diff(r.due,TODAY);
+    if(n<0) f.push({lvl:'red',code:'overdue',text:'Overdue '+(-n)+' day'+(n===-1?'':'s')});
+    else if(n<=S.settings.soonDays) f.push({lvl:'amber',code:'soon',text:'Due '+rel(r.due)}); }
+  else f.push({lvl:'amber',code:'nodate',text:'No due date'});
+  if(r.status==='To confirm') f.push({lvl:'amber',code:'confirm',text:'Status still "To confirm"'});
+  if(vagueOwner(r)) f.push({lvl:'amber',code:'owner',text:'No named person'});
+  if(!r.next) f.push({lvl:'amber',code:'nonext',text:'No next step'});
+  if(r.updated){ const wd=workdaysBetween(r.updated,TODAY); if(wd>S.settings.staleDays) f.push({lvl:'info',code:'stale',text:'Not updated for '+wd+' working days'}); }
+  else f.push({lvl:'info',code:'stale',text:'Never updated'});
+  const m=(r.notes||'').match(/originally needed by\s+(\d{1,2})(?:[–-]\d{1,2})?\s+([A-Za-z]{3})/i);
+  if(m && r.due){ const mi=MO.findIndex(x=>x.toLowerCase()===m[2].toLowerCase()); if(mi>=0){ const y=r.due.slice(0,4), orig=y+'-'+String(mi+1).padStart(2,'0')+'-'+m[1].padStart(2,'0'); const s=diff(r.due,orig); if(s>0) f.push({lvl:'info',code:'slip',text:'Slipped '+s+' days from '+fmt(orig,false)}); } }
+  if(/critical path/i.test(r.notes||'')) f.push({lvl:'crit',code:'critical',text:'Critical path'});
+  return f;
+}
+function interviewFlags(r){
+  const f=[]; if(/dropped/i.test(r.stage)) return f;
+  if(r.date){ const n=diff(r.date,TODAY);
+    if(n<0 && /scheduled/i.test(r.stage)) f.push({lvl:'amber',code:'held?',text:'Date passed: held? Update the stage'});
+    if(n<=0 && !yes(r.writeup) && (n<-1)) f.push({lvl:'red',code:'writeup',text:'Write-up overdue (24-hour rule)'});
+    else if(n<=0 && !yes(r.writeup)) f.push({lvl:'amber',code:'writeup',text:'Write-up due within 24 hours'});
+    if(n>=0 && n<=2 && !yes(r.brief)) f.push({lvl:'amber',code:'brief',text:'Brief not done; interview '+rel(r.date)}); }
+  else if(/scheduled/i.test(r.stage)) f.push({lvl:'amber',code:'nodate',text:'Scheduled but no date'});
+  if(/held/i.test(r.stage) && !yes(r.writeup) && !r.date) f.push({lvl:'amber',code:'writeup',text:'Held: write-up not done'});
+  if(/to be nominated/i.test(r.name)) f.push({lvl:'info',code:'noname',text:'Interviewee not yet named'});
+  return f;
+}
+function sessionFlags(r){
+  const f=[]; if(/cancel/i.test(r.status)) return f;
+  if(r.date){ const n=diff(r.date,TODAY);
+    if(n<0 && /scheduled|requested/i.test(r.status)) f.push({lvl:'amber',code:'held?',text:'Date passed: held? Update the status'});
+    if(n<-1 && /held/i.test(r.status) && !yes(r.writeup)) f.push({lvl:'red',code:'writeup',text:'Write-up overdue (24-hour rule)'});
+    else if(n<=0 && /held/i.test(r.status) && !yes(r.writeup)) f.push({lvl:'amber',code:'writeup',text:'Write-up due within 24 hours'}); }
+  else { if(/held/i.test(r.status) && !yes(r.writeup)) f.push({lvl:'amber',code:'writeup',text:'Held: write-up not done'});
+    if(/scheduled/i.test(r.status)) f.push({lvl:'amber',code:'nodate',text:'Scheduled but no date'}); }
+  if(/to be nominated/i.test(r.country||'')) f.push({lvl:'amber',code:'nominate',text:'Country not yet nominated'});
+  if(/not requested/i.test(r.status) && /bank/i.test(r.type||'')) f.push({lvl:'info',code:'notreq',text:'Not yet requested'});
+  return f;
+}
+function planFlags(r){
+  if(yes(r.done) || !r.date) return [];
+  const n=diff(r.date,TODAY);
+  if(n<0 && r.who!=='Milestone' && r.who!=='Meeting') return [{lvl:'amber',code:'unticked',text:'Not ticked off ('+fmt(r.date)+')'}];
+  if(n<0 && r.who==='Milestone') return [{lvl:'red',code:'missed',text:'Milestone date passed'}];
+  if(n<0 && r.who==='Meeting') return [{lvl:'amber',code:'held?',text:'Held? Tick it and log the write-up'}];
+  return [];
+}
+const FLAGS={ tracker:trackerFlags, interviews:interviewFlags, sessions:sessionFlags, plan:planFlags };
+function worst(fl){ return fl.some(x=>x.lvl==='red')?'red':fl.some(x=>x.lvl==='amber')?'amber':''; }
+function flagTags(fl){ return fl.map(x=>'<span class="tag '+(x.lvl==='crit'?'crit':x.lvl)+'">'+esc(x.text)+'</span>').join(''); }
+function has(fl,code){ return fl.some(x=>x.code===code); }
+
+/* ==========================================================================
+   Rendering
+   ========================================================================== */
+const TABS=[['today','Today'],['team','Team prompts'],['tracker','Tracker'],['meetings','Interviews & sessions'],['plan','Plan & health'],['data','Data']];
+function render(){
+  const red=S.tracker.filter(r=>has(trackerFlags(r),'overdue')).length;
+  $('#tabs').innerHTML=TABS.map(([k,l])=>'<button data-tab="'+k+'" class="'+(S.ui.tab===k?'on':'')+'">'+l+(k==='tracker'&&red?'<span class="count">'+red+'</span>':'')+'</button>').join('');
+  $('#hdrSub').textContent = S.file ? fmt(TODAY)+' · '+S.file.name+' · loaded '+new Date(S.file.importedAt).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : 'Your tracker, checked every morning.';
+  const v=$('#view');
+  if(!S.tracker.length && S.ui.tab!=='data'){ v.innerHTML=welcome(); bindDrop(); return; }
+  v.innerHTML=({today:viewToday,team:viewTeam,tracker:viewTracker,meetings:viewMeetings,plan:viewPlan,data:viewData}[S.ui.tab]||viewToday)();
+  bindDrop();
+}
+function welcome(){
+  return '<div class="card"><h2>Start by loading your tracker</h2><p class="why">Drop the Excel tracker below, or click to choose it. It is read here, in your browser. Nothing is uploaded anywhere.</p>'
+   +dropZone()+'<p class="small muted" style="margin-top:12px">The tool reads the <b>Tracker</b>, <b>Interviews</b>, <b>Sessions</b> and <b>Plan</b> tabs by their column headings. You can edit here and download the same workbook back with your changes written in, keeping its colours, dropdowns and Summary tab.</p></div>';
+}
+function dropZone(){ return '<div class="drop" id="drop"><strong>Drop the tracker .xlsx here</strong>or click to choose the file · a .json backup also works</div>'; }
+
+/* ---------- TODAY ---------- */
+function milestones(){ return S.plan.filter(r=>r.who==='Milestone' && r.date).sort((a,b)=>a.date<b.date?-1:1); }
+function viewToday(){
+  const me=S.settings.me, T=S.tracker;
+  const open=T.filter(isOpen);
+  const fl=new Map(T.map(r=>[r,trackerFlags(r)]));
+  const overdue=open.filter(r=>has(fl.get(r),'overdue')), soon=open.filter(r=>has(fl.get(r),'soon'));
+  const bank=open.filter(bankOwes), toConfirm=open.filter(r=>r.status==='To confirm');
+  const wu=[...S.interviews.filter(r=>has(interviewFlags(r),'writeup')),...S.sessions.filter(r=>has(sessionFlags(r),'writeup'))];
+  const unticked=S.plan.filter(r=>has(planFlags(r),'unticked'));
+  const ms=milestones(), next=ms.find(m=>m.date>=TODAY && !yes(m.done)), last=ms[ms.length-1];
+  const wk=S.plan.find(r=>r.date===TODAY)?.week;
+
+  let h='<div class="card"><div class="hero"><div class="big">'+fmt(TODAY)+'</div>'
+    +(wk?'<div class="muted">'+esc(wk)+'</div>':'')
+    +(next?'<div>Next milestone <b>'+esc(fmt(next.date))+'</b> ('+rel(next.date)+'): '+esc(next.task)+'</div>':'')
+    +(last && last.date>=TODAY?'<div class="muted">'+diff(last.date,TODAY)+' days to '+esc(fmt(last.date))+'</div>':'')+'</div>'
+    +'<div class="tiles">'
+    +tile(overdue.length,'Overdue','red','overdue')+tile(soon.length,'Due in '+S.settings.soonDays+' days','amber','soon')
+    +tile(bank.length,'Waiting on the Bank','','bank')+tile(toConfirm.length,'Still "To confirm"','amber','confirm')
+    +tile(wu.length,'Write-ups due',wu.length?'red':'green','go:meetings')+tile(unticked.length,'Plan tasks not ticked',unticked.length?'amber':'green','go:plan')
+    +'</div></div>';
+
+  // Your list
+  const mine=open.filter(r=>actors(r).includes(me) && (has(fl.get(r),'overdue')||has(fl.get(r),'soon')||has(fl.get(r),'nodate')))
+    .sort((a,b)=>(a.due||'9')<(b.due||'9')?-1:1);
+  const todayPlan=S.plan.filter(r=>r.date===TODAY && (r.who===me||r.who==='Meeting'||r.who==='Milestone'));
+  const carry=S.plan.filter(r=>r.who===me && has(planFlags(r),'unticked'));
+  let li='';
+  for(const r of todayPlan) li+=planLi(r);
+  for(const r of mine) li+=trackerLi(r,fl.get(r));
+  for(const r of carry) li+=planLi(r,true);
+  h+='<div class="grid two"><div class="card"><h2>Your list for today</h2><p class="why">Your plan for today, items where you act next that are overdue or due soon, and earlier plan tasks you have not ticked.</p>'
+    +(li?'<ul class="list">'+li+'</ul>':'<div class="empty">Nothing urgent for you. Check the Team prompts tab.</div>')+'</div>';
+
+  // Chase the Bank
+  const groups={}; for(const r of bank.filter(r=>has(fl.get(r),'overdue')||has(fl.get(r),'soon')||r.status==='Waiting on others')){ const k=firstName(r.owner)||'Bank'; (groups[k]=groups[k]||[]).push(r); }
+  let ch=''; for(const [who,rs] of Object.entries(groups)){
+    ch+='<h3>'+esc(rs[0].owner)+' · '+rs.length+'</h3><ul class="list">'+rs.map(r=>trackerLi(r,fl.get(r),true)).join('')+'</ul><div class="row" style="margin-top:6px"><button class="b" data-email="'+esc(who)+'">Draft reminder email</button></div>';
+  }
+  h+='<div class="card"><h2>Chase the Bank</h2><p class="why">Bank-owned items that are overdue, due soon or waiting on others, grouped by person, with a drafted reminder to send yourself.</p>'+(ch||'<div class="empty">Nothing to chase right now.</div>')+'</div></div>';
+
+  // Check-in + coming up + changes
+  const ci=[...overdue,...soon].sort((a,b)=>(a.due||'')<(b.due||'')?-1:1);
+  h+='<div class="grid two"><div class="card"><div class="row"><h2 class="spacer">10:00 check-in</h2><button class="b" data-copy="checkin">Copy agenda</button></div><p class="why">Red and amber rows, as the tracker\'s own "Start here" routine asks for.</p>'
+    +(ci.length?'<ul class="list">'+ci.map(r=>trackerLi(r,fl.get(r),true)).join('')+'</ul>':'<div class="empty">No red or amber rows.</div>')+'</div>';
+  const horizon=addDays(TODAY,7);
+  const up=[...S.plan.filter(r=>r.date>TODAY && r.date<=horizon && (r.who==='Milestone'||r.who==='Meeting'||r.who===me)).map(r=>({d:r.date,t:r.task,k:r.who})),
+    ...open.filter(r=>r.due && r.due>addDays(TODAY,S.settings.soonDays) && r.due<=horizon).map(r=>({d:r.due,t:'#'+r.id+' '+r.item,k:firstName(r.owner)})),
+    ...S.sessions.filter(r=>r.date>TODAY && r.date<=horizon).map(r=>({d:r.date,t:r.session,k:'Session'})),
+    ...S.interviews.filter(r=>r.date>TODAY && r.date<=horizon).map(r=>({d:r.date,t:'Interview: '+r.name+' ('+r.org+')',k:'Interview'}))].sort((a,b)=>a.d<b.d?-1:1);
+  h+='<div class="card"><h2>Coming up in the next 7 days</h2><p class="why">Milestones, meetings, your plan and tracker due dates.</p>'
+    +(up.length?'<ul class="list">'+up.map(x=>'<li><span class="dot '+(x.k==='Milestone'?'red':x.k==='Meeting'||x.k==='Session'||x.k==='Interview'?'blue':'')+'"></span><div class="body"><div class="t">'+esc(x.t)+'</div><div class="m">'+esc(fmt(x.d))+' · '+esc(x.k)+'</div></div></li>').join('')+'</ul>':'<div class="empty">Nothing dated in the next week.</div>')+'</div></div>';
+
+  const since=Date.now()-36*3600000, recent=S.history.filter(x=>x.t>=since && x.f!=='updated');
+  h+='<div class="card"><h2>What changed recently</h2><p class="why">Updates from Excel imports and from your edits here, over the last 36 hours.</p>'+changeList(recent.slice(-40).reverse())+'</div>';
+  return h;
+}
+function tile(n,l,cls,act){ return '<button class="tile '+cls+'" data-tile="'+act+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></button>'; }
+function trackerLi(r,fl,compact){
+  const w=worst(fl);
+  return '<li><span class="dot '+w+'"></span><div class="body"><div class="t">#'+esc(r.id)+' '+esc(r.item)+'</div>'
+    +'<div class="m">'+esc(r.owner||'No owner')+(r.next?' · Next: '+esc(r.next):'')+(r.due?' · due '+esc(fmt(r.due)):'')+'</div>'
+    +'<div>'+flagTags(fl.filter(x=>!compact||x.lvl!=='info'))+'</div></div>'
+    +'<div class="acts"><button class="b" data-done="'+esc(r.id)+'">Done</button><button class="b" data-chased="'+esc(r.id)+'">Chased</button><button class="b ghost" data-edit="tracker:'+esc(keyOf(r))+'">Edit</button></div></li>';
+}
+function planLi(r,carry){
+  const lbl=r.who==='Meeting'?'Meeting':r.who==='Milestone'?'Milestone':carry?'From '+fmt(r.date)+', not ticked':'Plan for today';
+  return '<li><input type="checkbox" data-tick="'+esc(keyOf(r))+'" '+(yes(r.done)?'checked':'')+'><div class="body"><div class="t">'+esc(r.task)+'</div><div class="m">'+esc(lbl)+(r.notes?' · '+esc(r.notes):'')+'</div></div></li>';
+}
+function changeList(list){
+  if(!list.length) return '<div class="empty">No changes yet.</div>';
+  return '<ul class="list">'+list.map(x=>'<li><span class="dot '+(x.src==='excel'?'blue':'green')+'"></span><div class="body"><div class="t">'+esc(SCHEMA[x.kind]?.label||'')+' #'+esc(x.id)+' '+esc(x.title)+'</div><div class="m">'
+    +(x.f==='(new)'?'Added':esc(SCHEMA[x.kind]?.fields[x.f]||x.f)+': '+esc(shown(x.kind,x.f,x.from)||'(blank)')+' → '+esc(shown(x.kind,x.f,x.to)||'(blank)'))+' · '+(x.src==='excel'?'from Excel':'by you')+' · '+new Date(x.t).toLocaleString([], {weekday:'short',hour:'2-digit',minute:'2-digit'})+'</div></div></li>').join('')+'</ul>';
+}
+
+/* ---------- TEAM PROMPTS ---------- */
+function teamItems(p){
+  const out=[]; const keeper=p===S.settings.keeper, me=S.settings.me;
+  const add=(sec,text,ref)=>out.push({sec,text,ref});
+  for(const r of S.plan.filter(r=>r.who===p && r.date===TODAY && !yes(r.done))) add('today',r.task);
+  for(const r of S.plan.filter(r=>r.who===p && has(planFlags(r),'unticked'))) add('confirm',r.task+' ('+fmt(r.date)+')');
+  for(const r of S.tracker.filter(r=>isOpen(r) && actors(r).includes(p))){ const fl=trackerFlags(r);
+    if(has(fl,'overdue')||has(fl,'soon')) add('items','#'+r.id+' '+r.item+' — '+(fl.find(x=>x.code==='overdue'||x.code==='soon').text.toLowerCase())+(r.next?'. Next: '+r.next:'')); }
+  if(keeper){
+    for(const r of S.tracker.filter(isOpen)){ const fl=trackerFlags(r), asks=[];
+      if(has(fl,'overdue')) asks.push('past its due date: update the status, or the due date if the next step changed');
+      if(has(fl,'confirm')) asks.push('still "To confirm": bring it to the check-in');
+      if(has(fl,'owner')) asks.push('no named person: who exactly?');
+      if(has(fl,'nodate')) asks.push('add a due date');
+      if(has(fl,'nonext')) asks.push('add the next step');
+      if(has(fl,'stale') && !asks.length) asks.push(fl.find(x=>x.code==='stale').text.toLowerCase()+': still current?');
+      if(asks.length) add('hygiene','#'+r.id+' '+r.item+': '+asks.join('; '),r); }
+    for(const r of S.interviews){ const fl=interviewFlags(r).filter(x=>x.lvl!=='info'); if(fl.length) add('meet','Interview: '+r.name+' ('+r.org+'): '+fl.map(x=>x.text.toLowerCase()).join('; ')); }
+    for(const r of S.sessions){ const fl=sessionFlags(r).filter(x=>x.lvl!=='info'); if(fl.length) add('meet','Session: '+r.session+': '+fl.map(x=>x.text.toLowerCase()).join('; ')); }
+    for(const r of S.plan.filter(r=>r.who==='Meeting' && has(planFlags(r),'held?'))) add('meet','Meeting '+fmt(r.date)+': '+r.task.replace(/^\d{1,2}:\d{2}\s*/,'')+': write-up done and logged in Sessions?');
+  }
+  const tm=nextWorkday(TODAY);
+  for(const r of S.plan.filter(r=>r.who===p && r.date===tm)) add('tomorrow',r.task);
+  for(const n of S.notes.filter(n=>n.who===p && !n.done)) add('notes',n.text);
+  if(keeper && dow(TODAY)===5) add('today','Send me your three lines: what was done this week, what is late, what you need.');
+  return out;
+}
+const SECS={ today:'For today', items:'Your items that are due or overdue', confirm:'Please confirm these are done, or tell me what is blocking', meet:'Meetings and write-ups', hygiene:'Tracker fixes', tomorrow:'Tomorrow', notes:'From me' };
+function teamMessage(p,items){
+  let s='Hi '+p+', here is the list for '+fmt(TODAY)+'.\n';
+  for(const [k,label] of Object.entries(SECS)){ const it=items.filter(x=>x.sec===k); if(!it.length) continue;
+    s+='\n'+label+':\n'+it.slice(0,25).map(x=>'• '+x.text).join('\n')+(it.length>25?'\n• …and '+(it.length-25)+' more in the tracker':'')+'\n'; }
+  return s+'\nShout at the 10:00 check-in if anything is unclear. Thanks!\n'+S.settings.me;
+}
+function viewTeam(){
+  const team=S.settings.team; if(!team.includes(S.ui.person)) S.ui.person=team[0];
+  const p=S.ui.person, items=teamItems(p);
+  let h='<div class="card"><div class="chips">'+team.map(x=>'<button class="chip '+(x===p?'on':'')+'" data-person="'+esc(x)+'">'+esc(x)+'</button>').join('')+'</div>'
+    +'<p class="why">What to ask '+esc(p)+' to do and check, built from the plan, the tracker and your notes. '+(p===S.settings.keeper?esc(p)+' keeps the tracker, so tracker fixes and write-ups are included. ':'')+'Edit the message, then copy it into Teams, WhatsApp or email.</p></div>';
+  h+='<div class="grid two"><div class="card">';
+  for(const [k,label] of Object.entries(SECS)){ const it=items.filter(x=>x.sec===k); if(!it.length) continue;
+    h+='<h3>'+esc(label)+' · '+it.length+'</h3><ul class="list">'+it.map(x=>'<li><span class="dot '+(k==='confirm'||k==='hygiene'?'amber':k==='items'?'red':k==='notes'?'green':'blue')+'"></span><div class="body">'+esc(x.text)+'</div>'
+      +(k==='notes'?'<div class="acts"><button class="b ghost" data-notedone="'+esc(x.text)+'">Remove</button></div>':'')+'</li>').join('')+'</ul>'; }
+  if(!items.length) h+='<div class="empty">Nothing to ask '+esc(p)+' right now.</div>';
+  h+='<h3>Add a note for '+esc(p)+'</h3><div class="row"><input id="noteIn" style="flex:1;min-width:200px;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)" placeholder="e.g. Book the room for Thursday\'s interview"><button class="b primary" id="noteAdd">Add</button></div>'
+    +'<p class="small muted">Notes stay in the message until you remove them. You can also click Edit on any tracker item and choose "Ask '+esc(S.settings.keeper)+' about this".</p></div>';
+  h+='<div class="card"><div class="row"><h2 class="spacer">Message</h2><button class="b" id="msgMail">Open in email</button><button class="b primary" id="msgCopy">Copy</button></div><textarea class="msg" id="msg">'+esc(teamMessage(p,items))+'</textarea></div></div>';
+  return h;
+}
+
+/* ---------- TRACKER ---------- */
+function viewTracker(){
+  const f=S.ui.tf, L=S.lists;
+  const sel=(id,val,opts,all)=>'<select data-tf="'+id+'"><option value="">'+all+'</option>'+opts.map(o=>'<option '+(o===val?'selected':'')+'>'+esc(o)+'</option>').join('')+'</select>';
+  const owners=[...new Set([...(L.owners||[]),...S.tracker.map(r=>r.owner).filter(Boolean)])];
+  const flagOpts=[['overdue','Overdue'],['soon','Due soon'],['confirm','To confirm'],['owner','No named person'],['nodate','No due date'],['stale','Not updated recently'],['critical','Critical path'],['bank','Waiting on the Bank'],['mine','Where I act next']];
+  let h='<div class="card"><div class="filters">'
+    +'<input type="search" data-tf="q" placeholder="Search items, next steps, notes…" value="'+esc(f.q)+'">'
+    +'<select data-tf="status">'+[['open','Open items'],['all','All items'],['closed','Done or dropped'],...(L.status||[]).map(s=>[s,s])].map(([v,l])=>'<option value="'+esc(v)+'" '+(f.status===v?'selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'
+    +sel('type',f.type,L.types||[],'All types')+sel('part',f.part,L.parts||[],'All Action Plan parts')+sel('owner',f.owner,owners,'All owners')
+    +'<select data-tf="flag"><option value="">Any flag</option>'+flagOpts.map(([v,l])=>'<option value="'+v+'" '+(f.flag===v?'selected':'')+'>'+l+'</option>').join('')+'</select>'
+    +'<button class="b ghost" id="tfClear">Clear</button><span class="spacer"></span><button class="b primary" id="newItem">+ New item</button></div>';
+  const q=f.q.toLowerCase();
+  const rows=S.tracker.filter(r=>{
+    if(f.status==='open' && !isOpen(r)) return false; if(f.status==='closed' && isOpen(r)) return false;
+    if(!['open','all','closed'].includes(f.status) && r.status!==f.status) return false;
+    if(f.type && r.type!==f.type) return false; if(f.part && r.part!==f.part) return false; if(f.owner && r.owner!==f.owner) return false;
+    if(f.flag==='bank'){ if(!(isOpen(r)&&bankOwes(r))) return false; }
+    else if(f.flag==='mine'){ if(!(isOpen(r)&&actors(r).includes(S.settings.me))) return false; }
+    else if(f.flag && !has(trackerFlags(r),f.flag)) return false;
+    if(q && !(Object.values(r).join(' ').toLowerCase().includes(q))) return false; return true;
+  }).sort((a,b)=>{ const x=a.due||'9999', y=b.due||'9999'; return x<y?-1:x>y?1:(+a.id||0)-(+b.id||0); });
+  h+='<div class="small muted" style="margin-bottom:6px">'+rows.length+' of '+S.tracker.length+' items · red = overdue, amber = due in '+S.settings.soonDays+' days, grey = done. Click a row to edit.</div>'
+    +'<div class="tablewrap"><table><thead><tr><th>ID</th><th>Item</th><th>Owner</th><th>Next step</th><th>Due</th><th>Status</th><th>Part</th></tr></thead><tbody>'
+    +rows.map(r=>{ const fl=trackerFlags(r), w=worst(fl.filter(x=>x.code==='overdue'||x.code==='soon'));
+      return '<tr class="'+(!isOpen(r)?'g':w==='red'?'r':w==='amber'?'a':'')+'" data-edit="tracker:'+esc(keyOf(r))+'"><td class="id">'+esc(r.id)+'</td><td>'+esc(r.item)+'<div>'+flagTags(fl.filter(x=>x.code!=='overdue'&&x.code!=='soon'))+'</div></td><td>'+esc(r.owner)+'</td><td>'+esc(r.next)+'</td><td class="nowrap">'+esc(fmt(r.due))+(r.due&&isOpen(r)?'<div class="small muted">'+rel(r.due)+'</div>':'')+'</td><td class="nowrap">'+esc(r.status)+'</td><td>'+esc(r.part)+'</td></tr>'; }).join('')
+    +'</tbody></table></div></div>';
+  return h;
+}
+
+/* ---------- INTERVIEWS & SESSIONS ---------- */
+function viewMeetings(){
+  const st=S.settings, I=S.interviews, Ss=S.sessions;
+  const count=(arr,key,vals)=>vals.map(v=>[v,arr.filter(r=>(r[key]||'')===v).length]);
+  const held=I.filter(r=>/held|write-up/i.test(r.stage)).length;
+  let h='<div class="card"><h2>Interviews</h2><p class="why">Target: '+st.interviewTarget+' or more strong interviews. Held so far: <b>'+held+'</b>.</p>'
+    +'<div class="funnel">'+count(I,'stage',S.lists.stages||DEFAULT_LISTS.stages).map(([v,n])=>'<div><b>'+n+'</b>'+esc(v)+'</div>').join('')+'</div>'
+    +'<div class="row" style="margin-bottom:8px"><span class="spacer"></span><button class="b primary" data-new="interviews">+ New interview</button></div>'
+    +table('interviews',I,['id','name','org','pathway','route','stage','date','brief','writeup'],interviewFlags)+'</div>';
+  const rmc=Ss.filter(r=>/rmc/i.test(r.type||'')), nominated=rmc.filter(r=>r.country && !/to be nominated/i.test(r.country)).length;
+  const bankM=Ss.filter(r=>/bank meeting/i.test(r.type||''));
+  h+='<div class="card"><h2>Sessions and Bank meetings</h2><p class="why">RMC sessions listed: <b>'+rmc.length+'</b> of about '+st.rmcTarget+' planned · countries nominated: <b>'+nominated+'</b> · Bank meetings requested or further along: <b>'+bankM.filter(r=>!/not requested/i.test(r.status)).length+'</b> of '+bankM.length+'.</p>'
+    +'<div class="funnel">'+count(Ss,'status',S.lists.sessionStatus||DEFAULT_LISTS.sessionStatus).map(([v,n])=>'<div><b>'+n+'</b>'+esc(v)+'</div>').join('')+'</div>'
+    +'<div class="row" style="margin-bottom:8px"><span class="spacer"></span><button class="b primary" data-new="sessions">+ New session</button></div>'
+    +table('sessions',Ss,['id','session','type','hub','country','by','status','date','writeup'],sessionFlags)+'</div>';
+  return h;
+}
+function table(kind,rows,cols,flagFn){
+  const sc=SCHEMA[kind];
+  const sorted=[...rows].sort((a,b)=>{ const x=worst(flagFn(a))?0:1, y=worst(flagFn(b))?0:1; return x-y || (+a.id||0)-(+b.id||0); });
+  return '<div class="tablewrap"><table><thead><tr>'+cols.map(c=>'<th>'+esc(sc.fields[c])+'</th>').join('')+'</tr></thead><tbody>'
+    +sorted.map(r=>{ const fl=flagFn(r), w=worst(fl); return '<tr class="'+(w==='red'?'r':w==='amber'?'a':'')+'" data-edit="'+kind+':'+esc(keyOf(r))+'">'+cols.map((c,i)=>'<td class="'+(c==='id'?'id':sc.dates.includes(c)?'nowrap':'')+'">'+esc(sc.dates.includes(c)?fmt(r[c]):r[c])+(i===1?'<div>'+flagTags(fl)+'</div>':'')+'</td>').join('')+'</tr>'; }).join('')
+    +'</tbody></table></div>';
+}
+
+/* ---------- PLAN & HEALTH ---------- */
+function viewPlan(){
+  const ms=milestones(), nextMs=ms.find(m=>m.date>=TODAY && !yes(m.done));
+  let h='<div class="card"><h2>Milestones</h2>'+(ms.length?'<div class="timeline">'+ms.map(m=>'<div class="ms '+(m===nextMs?'next':m.date<TODAY||yes(m.done)?'past':'')+'"><div class="d">'+esc(fmt(m.date))+'</div>'+esc(m.task)+'</div>').join('')+'</div>':'<div class="empty">No milestones. Add rows with Who = "Milestone" to the Plan tab of your workbook.</div>')+'</div>';
+  // Health by Action Plan part
+  const parts=[...new Set([...(S.lists.parts||[]),...S.tracker.map(r=>r.part).filter(Boolean)])];
+  h+='<div class="card"><h2>Action Plan health</h2><p class="why">Every tracker item feeds one of the nine results (or the Position Paper). Red: two or more overdue, or an overdue critical-path item. Amber: anything overdue, or due within '+S.settings.soonDays+' days. Click a box to see its items.</p><div class="health">'
+    +parts.map(p=>{ const rs=S.tracker.filter(r=>r.part===p), op=rs.filter(isOpen); if(!rs.length) return '';
+      const od=op.filter(r=>has(trackerFlags(r),'overdue')), sn=op.filter(r=>has(trackerFlags(r),'soon')), crit=od.some(r=>/critical path/i.test(r.notes||''));
+      const c=od.length>=2||crit?'red':od.length||sn.length?'amber':'green';
+      const why=c==='red'?od.length+' overdue'+(crit?' incl. critical path':''):c==='amber'?(od.length?od.length+' overdue':'')+(od.length&&sn.length?', ':'')+(sn.length?sn.length+' due soon':''):'On track';
+      return '<div class="h '+c+'" data-part="'+esc(p)+'"><div class="n">'+esc(p)+'</div><div class="m">'+op.length+' open · '+(rs.length-op.length)+' closed · '+op.filter(bankOwes).length+' with the Bank</div><div class="m"><b>'+esc(why)+'</b></div></div>'; }).join('')+'</div>';
+  const dec=S.tracker.filter(r=>/decision/i.test(r.type||''));
+  if(dec.length) h+='<h3>Management decisions</h3><ul class="list">'+dec.map(r=>'<li><span class="dot '+(isOpen(r)?worst(trackerFlags(r)):'green')+'"></span><div class="body"><div class="t">'+esc(r.item)+'</div><div class="m">'+esc(r.status)+' · '+esc(r.next||'')+(r.due?' · by '+esc(fmt(r.due)):'')+'</div></div><div class="acts"><button class="b ghost" data-edit="tracker:'+esc(keyOf(r))+'">Edit</button></div></li>').join('')+'</ul>';
+  h+='</div>';
+  // Day-by-day
+  const whos=[...new Set(S.plan.map(r=>r.who).filter(Boolean))];
+  const w=S.ui.planWho;
+  h+='<div class="card"><div class="row"><h2 class="spacer">Day by day</h2><label class="small muted"><input type="checkbox" id="showDone" '+(S.ui.planShowDone?'checked':'')+' style="vertical-align:-4px"> show ticked</label><button class="b" data-new="plan">+ Add task</button></div>'
+    +'<div class="chips"><button class="chip '+(!w?'on':'')+'" data-planwho="">Everyone</button>'+whos.map(x=>'<button class="chip '+(w===x?'on':'')+'" data-planwho="'+esc(x)+'">'+esc(x)+'</button>').join('')+'</div>';
+  const rows=S.plan.filter(r=>(!w||r.who===w)&&(S.ui.planShowDone||!yes(r.done)||r.date>=TODAY)).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(+a.id||0)-(+b.id||0));
+  if(!S.plan.length) h+='<div class="empty">No plan loaded. Add a "Plan" tab to the workbook (ID, Date, Week, Who, Task, Done, Notes), or add tasks here.</div>';
+  let cur='';
+  for(const r of rows){
+    if(r.date!==cur){ if(cur) h+='</ul>'; cur=r.date; h+='<h3>'+esc(fmt(r.date))+(r.date===TODAY?' · today':'')+(r.week?' · '+esc(r.week):'')+'</h3><ul class="list">'; }
+    const fl=planFlags(r);
+    h+='<li><input type="checkbox" data-tick="'+esc(keyOf(r))+'" '+(yes(r.done)?'checked':'')+'><div class="body"><div class="t" style="font-weight:'+(r.who==='Milestone'?700:500)+'">'+esc(r.task)+'</div><div class="m">'+esc(r.who)+(r.notes?' · '+esc(r.notes):'')+'</div>'+flagTags(fl)+'</div><div class="acts"><button class="b ghost" data-edit="plan:'+esc(keyOf(r))+'">Edit</button></div></li>';
+  }
+  if(cur) h+='</ul>';
+  return h+'</div>';
+}
+
+/* ---------- DATA ---------- */
+function viewData(){
+  const f=S.file, mineSince=S.history.filter(x=>x.src==='tool' && (!f || x.t>(f.exportedAt||f.importedAt)) && x.f!=='updated');
+  let h='<div class="grid two"><div class="card"><h2>1. Load the latest tracker</h2><p class="why">Each morning, drop in the latest Excel (for example the copy Delali saved on SharePoint). You will see exactly what changed before anything is applied. Your own edits are never overwritten without asking.</p>'+dropZone()
+    +(f?'<p class="small muted" style="margin-top:10px">Last loaded: <b>'+esc(f.name)+'</b>, '+new Date(f.importedAt).toLocaleString()+(f.exportedAt?'<br>Last downloaded: '+new Date(f.exportedAt).toLocaleString():'')+'</p>':'')+'</div>';
+  h+='<div class="card"><h2>2. Send your changes back</h2><p class="why">You have made <b>'+mineSince.length+'</b> change'+(mineSince.length===1?'':'s')+' here since the last load or download.</p>'
+    +'<div class="row"><button class="b primary" id="exportX">Download updated Excel</button><button class="b" id="copyChanges">Copy changes as a message</button></div>'
+    +'<p class="small muted" style="margin-top:10px"><b>Download updated Excel</b> writes your changes into the workbook you last loaded. It keeps the colours, dropdowns, formulas and Summary tab. Load Delali\'s latest copy first if she has worked on it since.<br><b>Copy changes as a message</b> lists your edits so Delali can make them in the shared file herself. This is safer if you both edit at the same time.</p></div></div>';
+  h+='<div class="grid two"><div class="card"><h2>Settings</h2><div class="form">'
+    +'<label>Your name (as written in the tracker)<input data-set="me" value="'+esc(S.settings.me)+'"></label>'
+    +'<label>Who keeps the tracker<input data-set="keeper" value="'+esc(S.settings.keeper)+'"></label>'
+    +'<label class="full">Team members to prompt (comma-separated)<input data-set="team" value="'+esc(S.settings.team.join(', '))+'"></label>'
+    +'<label>"Due soon" means within (days)<input type="number" min="0" max="14" data-set="soonDays" value="'+S.settings.soonDays+'"></label>'
+    +'<label>"Not updated" after (working days)<input type="number" min="1" max="30" data-set="staleDays" value="'+S.settings.staleDays+'"></label>'
+    +'<label>Interview target<input type="number" min="0" data-set="interviewTarget" value="'+S.settings.interviewTarget+'"></label>'
+    +'<label>RMC sessions planned<input type="number" min="0" data-set="rmcTarget" value="'+S.settings.rmcTarget+'"></label>'
+    +'</div></div>';
+  h+='<div class="card"><h2>Backup and reset</h2><p class="why">Everything is saved in this browser on this computer only. The Excel file stays the master copy. A backup file also keeps your notes and change history.</p>'
+    +'<div class="row"><button class="b" id="backup">Download backup (.json)</button><button class="b" id="restore">Restore backup</button><button class="b" id="reset" style="color:var(--red)">Clear everything from this browser</button></div></div></div>';
+  h+='<div class="card"><h2>How the checks work</h2><p class="why">No black box. These are the only rules the tool uses.</p><ul class="rules">'
+    +'<li><b>Overdue</b> (red): the due date has passed and the status is not Done or Dropped, the same rule as the Excel "Days overdue" column.</li>'
+    +'<li><b>Due soon</b> (amber): due today or in the next '+S.settings.soonDays+' days, the same as the Excel amber rows.</li>'
+    +'<li><b>No named person</b>: the Owner is blank, "Several", "TBD" or "Bank, to confirm". Someone has to chase a person, not an institution.</li>'
+    +'<li><b>To confirm</b>: a status that the "Start here" tab says should only last until the first check-in.</li>'
+    +'<li><b>Not updated</b>: "Last updated" is more than '+S.settings.staleDays+' working days ago. Editing an item here sets it to today.</li>'
+    +'<li><b>Slipped</b>: the Notes say "Originally needed by …", so the tool shows how many days the date has moved.</li>'
+    +'<li><b>Critical path</b>: the Notes mention "critical path". One overdue critical item turns its Action Plan part red.</li>'
+    +'<li><b>Who acts next</b>: the Owner, plus anyone named in "Next step" as "<span class="kbd">Name to …</span>" or "<span class="kbd">Name drafts …</span>". For example, "Miriam to chase" puts a Bank-owned item on your list.</li>'
+    +'<li><b>Write-ups</b>: an interview or session that has been held needs a write-up within 24 hours. After a day it turns red.</li>'
+    +'<li><b>Plan</b>: a task from an earlier day that is not ticked goes into that person\'s "please confirm" list. Past meetings ask for the write-up.</li>'
+    +'</ul></div>';
+  return h;
+}
+
+/* ==========================================================================
+   Edit dialog
+   ========================================================================== */
+const FIELD_UI={
+  tracker:{ item:['Item','text','full'], type:['Type','list:types'], part:['Action Plan part','list:parts'], owner:['Owner','list:owners'], status:['Status','list:status'], due:['Due date','date'], next:['Next step','area','full'], notes:['Notes and links','area','full'], updated:['Last updated','date'] },
+  interviews:{ name:['Interviewee','text','full'], org:['Organisation','text'], pathway:['Pathway','text'], route:['Route and owner','text'], stage:['Stage','list:stages'], date:['Interview date','date'], brief:['Brief done','yn'], writeup:['Write-up done','yn'], next:['Next step','area','full'], notes:['Notes','area','full'] },
+  sessions:{ session:['Session','text','full'], type:['Type','text'], hub:['Hub or department','text'], country:['Country','text'], by:['Convened by','text'], status:['Status','list:sessionStatus'], date:['Date','date'], writeup:['Write-up done','yn'], notes:['Notes','area','full'] },
+  plan:{ task:['Task','area','full'], date:['Date','date'], who:['Who','text'], done:['Done','yn'], notes:['Notes','area','full'] },
+};
+function field(kind,f,val){
+  const [label,type,cls]=FIELD_UI[kind][f]; const id='f_'+f;
+  let input;
+  if(type==='area') input='<textarea id="'+id+'">'+esc(val)+'</textarea>';
+  else if(type==='date') input='<input type="date" id="'+id+'" value="'+esc(val)+'">';
+  else if(type==='yn') input='<select id="'+id+'">'+['','Yes','No'].map(o=>'<option '+(o===val?'selected':'')+'>'+o+'</option>').join('')+'</select>';
+  else if(type.startsWith('list:')){ const opts=[...new Set([...(S.lists[type.slice(5)]||[]),val].filter(Boolean))];
+    input=type==='list:owners' ? '<input id="'+id+'" list="dl_'+f+'" value="'+esc(val)+'"><datalist id="dl_'+f+'">'+opts.map(o=>'<option value="'+esc(o)+'">').join('')+'</datalist>'
+      : '<select id="'+id+'"><option value=""></option>'+opts.map(o=>'<option '+(o===val?'selected':'')+'>'+esc(o)+'</option>').join('')+'</select>'; }
+  else input='<input id="'+id+'" value="'+esc(val)+'">';
+  return '<label class="'+(cls||'')+'">'+esc(label)+input+'</label>';
+}
+function find(kind,key){ return S[kind].find(r=>keyOf(r)===key); }
+function nextId(kind){ return String(Math.max(0,...S[kind].map(r=>+r.id||0))+1); }
+function openEdit(kind,key){
+  const isNew=!key; const r=isNew?{id:nextId(kind)}:find(kind,key); if(!r) return;
+  if(isNew){ for(const f of fieldsOf(kind)) if(r[f]===undefined) r[f]='';
+    if(kind==='tracker'){ r.status='Not started'; r.owner=S.settings.me; r.due=addWorkdays(TODAY,2); }
+    if(kind==='interviews'){ r.stage='Not contacted'; r.brief='No'; r.writeup='No'; }
+    if(kind==='sessions'){ r.status='Not requested'; r.writeup='No'; }
+    if(kind==='plan'){ r.date=TODAY; r.who=S.settings.me; r.done='No'; } }
+  let body='<div class="form">'+Object.keys(FIELD_UI[kind]).map(f=>field(kind,f,r[f]??'')).join('')+'</div>';
+  if(!isNew){ const fl=FLAGS[kind](r); if(fl.length) body='<div style="margin-bottom:10px">'+flagTags(fl)+'</div>'+body;
+    const hist=S.history.filter(x=>x.kind===kind && String(x.id)===String(r.id)).slice(-8).reverse();
+    if(hist.length) body+='<h3 style="font-size:13px;color:var(--muted);margin:16px 0 4px">History</h3>'+changeList(hist); }
+  const saveIt=()=>{ let changed=false;
+    for(const f of Object.keys(FIELD_UI[kind])){ const el=$('#f_'+f); if(!el) continue; let v=el.value.trim(); if(isNew) r[f]=v; else changed=setField(kind,r,f,v)||changed; }
+    if(isNew){ if(!r[SCHEMA[kind].title]){ alert('Please fill in '+FIELD_UI[kind][SCHEMA[kind].title][0]+'.'); return false; }
+      if(kind==='tracker') r.updated=TODAY; r._edited=Date.now(); S[kind].push(r); logH(kind,r,'(new)','','added','tool'); changed=true; }
+    if(changed){ save(); render(); toast('Saved'); } return true; };
+  const btns=[['Cancel',()=>closeDlg()]];
+  if(kind==='tracker' && !isNew){
+    btns.unshift(['Ask '+S.settings.keeper+' about this',()=>{ const q=prompt('What should '+S.settings.keeper+' check or do about #'+r.id+'?','Please check and update: '); if(q){ S.notes.push({who:S.settings.keeper,text:'#'+r.id+' '+r.item+': '+q,created:Date.now()}); save(); toast('Added to '+S.settings.keeper+'\'s prompts'); } }]);
+    btns.unshift(['+1 week',()=>{ $('#f_due').value=addDays($('#f_due').value||TODAY,7); }]);
+    btns.unshift(['+2 working days',()=>{ $('#f_due').value=addWorkdays($('#f_due').value||TODAY,2); }]);
+    btns.unshift(['Chased today',()=>{ const n=$('#f_notes'); n.value=(n.value?n.value.replace(/\s*$/,' '):'')+'Chased '+fmt(TODAY,false)+'.'; }]);
+  }
+  btns.push([isNew?'Add':'Save',()=>{ if(saveIt()!==false) closeDlg(); },'primary']);
+  openDlg((isNew?'New ':'')+SCHEMA[kind].label.replace(/s$/,'')+(isNew?'':' #'+r.id), body, btns);
+}
+function openDlg(t,body,btns){
+  $('#dlgTitle').textContent=t; $('#dlgBody').innerHTML=body; const ft=$('#dlgFoot'); ft.innerHTML='';
+  for(const [l,fn,cls] of btns){ const b=document.createElement('button'); b.className='b '+(cls||''); b.textContent=l; b.onclick=fn; ft.appendChild(b); }
+  const d=$('#dlg'); if(!d.open) d.showModal();
+}
+function closeDlg(){ $('#dlg').close(); }
+
+/* ---------- Bank reminder email ---------- */
+function emailFor(who){
+  const rs=S.tracker.filter(r=>isOpen(r) && bankOwes(r) && (firstName(r.owner)||'Bank')===who);
+  const named=!/^bank$/i.test(who);
+  const items=rs.map((r,i)=>{ const m=(r.notes||'').match(/originally needed by[^.]*/i); return (i+1)+'. '+r.item+(m?' ('+m[0].replace(/^o/,'o')+')':''); }).join('\n');
+  return 'Subject: AfDB 100M Jobs: follow-up on outstanding items\n\n'
+    +(named?'Dear '+who+',':'Dear Tapera and Sergio,')+'\n\nI hope you are well. A quick follow-up on the items below, which we need for the Action Plan:\n\n'+items+'\n\n'
+    +(named?'Could you let me know when we might expect these, or who on your side is best placed to send them?':'Could you let us know who on your side is best placed to send each of these, and roughly when?')
+    +'\n\nMany thanks,\n'+S.settings.me;
+}
+
+/* ==========================================================================
+   Events
+   ========================================================================== */
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('button,[data-edit],[data-part],.tile,#drop'); if(!t) return;
+  const d=t.dataset;
+  if(t.closest('dialog') && d.close!==undefined){ closeDlg(); return; }
+  if(d.tab){ S.ui.tab=d.tab; save(); render(); scrollTo(0,0); return; }
+  if(t.id==='drop'){ $('#fileIn').click(); return; }
+  if(d.tile){ if(d.tile.startsWith('go:')){ S.ui.tab=d.tile.slice(3); } else { S.ui.tab='tracker'; S.ui.tf={q:'',status:'open',type:'',part:'',owner:'',flag:d.tile}; } save(); render(); return; }
+  if(d.part!==undefined){ S.ui.tab='tracker'; S.ui.tf={q:'',status:'open',type:'',part:d.part,owner:'',flag:''}; save(); render(); return; }
+  if(d.edit){ const i=d.edit.indexOf(':'); openEdit(d.edit.slice(0,i), d.edit.slice(i+1)); return; }
+  if(d.new){ openEdit(d.new,null); return; }
+  if(d.done){ const r=S.tracker.find(x=>String(x.id)===d.done); if(r && setField('tracker',r,'status','Done')){ save(); render(); toast('#'+r.id+' marked Done'); } return; }
+  if(d.chased){ const r=S.tracker.find(x=>String(x.id)===d.chased); if(r){ setField('tracker',r,'notes',(r.notes?r.notes.replace(/\s*$/,' '):'')+'Chased '+fmt(TODAY,false)+'.'); save(); render(); toast('Logged: chased today'); } return; }
+  if(d.email){ const txt=emailFor(d.email); openDlg('Reminder to '+d.email,'<p class="why">A draft only. Nothing is sent from here. Copy it into Outlook and adjust as needed.</p><textarea class="msg" id="emailTxt">'+esc(txt)+'</textarea>',[['Close',closeDlg],['Copy',()=>copy($('#emailTxt').value),'primary']]); return; }
+  if(d.copy==='checkin'){ const rs=S.tracker.filter(r=>isOpen(r)&&(has(trackerFlags(r),'overdue')||has(trackerFlags(r),'soon'))).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1);
+    copy('10:00 check-in, '+fmt(TODAY)+'\n\n'+rs.map(r=>'• #'+r.id+' '+r.item+' | '+r.owner+' | '+(trackerFlags(r).find(x=>x.code==='overdue'||x.code==='soon')||{}).text+' | Next: '+(r.next||'?')).join('\n')); return; }
+  if(d.person){ S.ui.person=d.person; save(); render(); return; }
+  if(d.planwho!==undefined){ S.ui.planWho=d.planwho; save(); render(); return; }
+  if(d.notedone!==undefined){ const n=S.notes.find(n=>n.who===S.ui.person && n.text===d.notedone && !n.done); if(n){ n.done=true; save(); render(); } return; }
+  if(t.id==='noteAdd'){ const v=$('#noteIn').value.trim(); if(v){ S.notes.push({who:S.ui.person,text:v,created:Date.now()}); save(); render(); } return; }
+  if(t.id==='msgCopy'){ copy($('#msg').value); return; }
+  if(t.id==='msgMail'){ location.href='mailto:?subject='+encodeURIComponent('Today\'s list, '+fmt(TODAY))+'&body='+encodeURIComponent($('#msg').value); return; }
+  if(t.id==='tfClear'){ S.ui.tf={q:'',status:'open',type:'',part:'',owner:'',flag:''}; save(); render(); return; }
+  if(t.id==='newItem'){ openEdit('tracker',null); return; }
+  if(t.id==='exportX'){ try{ const {out,notes}=await buildExport(); const base=(S.file.name||'tracker.xlsx').replace(/\.xlsx$/i,'').replace(/_updated.*$/,'');
+      const yymmdd=TODAY.slice(2).replace(/-/g,''); const name=(/^\d{6}_/.test(base)?yymmdd+base.slice(6):base+'_'+yymmdd)+'.xlsx';
+      download(name,out,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      S.file.b64=bufToB64(out); S.file.exportedAt=Date.now(); S.file.name=name;
+      for(const k of KINDS) for(const r of S[k]) r._base=baseOf(k,r);
+      save(); render(); toast('Downloaded '+name+(notes.length?' · '+notes[0]:''));
+    }catch(err){ alert(err.message); } return; }
+  if(t.id==='copyChanges'){ const f=S.file; const ch=S.history.filter(x=>x.src==='tool' && (!f || x.t>(f.exportedAt||f.importedAt)) && x.f!=='updated');
+    if(!ch.length){ toast('No changes since the last load or download.'); return; }
+    copy('Hi '+S.settings.keeper+', please update the tracker with these changes:\n\n'+ch.map(x=>'• '+SCHEMA[x.kind].label+' #'+x.id+' '+x.title+': '+(x.f==='(new)'?'NEW: please add this row':SCHEMA[x.kind].fields[x.f]+' → '+(shown(x.kind,x.f,x.to)||'(blank)'))).join('\n')+'\n\nThanks!'); return; }
+  if(t.id==='backup'){ download('control-tower-backup-'+TODAY+'.json',JSON.stringify(S),'application/json'); return; }
+  if(t.id==='restore'){ $('#fileIn').click(); return; }
+  if(t.id==='reset'){ if(confirm('Remove all tracker data, notes and history from this browser? Your Excel file is not affected.')){ S=blank(); save(); render(); } return; }
+});
+document.addEventListener('change',e=>{
+  const t=e.target, d=t.dataset;
+  if(d.tick){ const r=find('plan',d.tick); if(r){ setField('plan',r,'done',t.checked?'Yes':'No'); save(); setTimeout(render,150); } return; }
+  if(d.tf){ S.ui.tf[d.tf]=t.value; save(); render(); return; }
+  if(t.id==='showDone'){ S.ui.planShowDone=t.checked; save(); render(); return; }
+  if(d.set){ const k=d.set; let v=t.value.trim();
+    if(k==='team') S.settings.team=v.split(',').map(x=>x.trim()).filter(Boolean);
+    else if(['soonDays','staleDays','interviewTarget','rmcTarget'].includes(k)) S.settings[k]=Math.max(0,parseInt(v,10)||0);
+    else S.settings[k]=v;
+    save(); toast('Saved'); return; }
+  if(t.id==='fileIn' && t.files[0]){ handleFile(t.files[0]); t.value=''; }
+});
+document.addEventListener('input',e=>{ if(e.target.dataset.tf==='q'){ clearTimeout(window._q); window._q=setTimeout(()=>{ S.ui.tf.q=e.target.value; save(); const pos=e.target.selectionStart; render(); const el=document.querySelector('[data-tf="q"]'); if(el){ el.focus(); el.setSelectionRange(pos,pos);} },250); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Enter' && e.target.id==='noteIn') $('#noteAdd').click(); });
+async function handleFile(file){
+  if(/\.json$/i.test(file.name)){ try{ const s=JSON.parse(await file.text()); if(s.v!==1 || !Array.isArray(s.tracker)) throw new Error('not a Control Tower backup');
+      if(confirm('Replace everything in this browser with the backup from '+file.name+'?')){ S={...blank(),...s}; save(); render(); toast('Backup restored'); } }catch(e){ alert('Could not restore: '+e.message); } return; }
+  await importBuffer(await file.arrayBuffer(), file.name);
+}
+function bindDrop(){
+  const z=$('#drop'); if(!z) return;
+  z.ondragover=e=>{e.preventDefault(); z.classList.add('over');}; z.ondragleave=()=>z.classList.remove('over');
+  z.ondrop=e=>{ e.preventDefault(); z.classList.remove('over'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); };
+}
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{ if(e.target.closest && e.target.closest('#drop')) return; e.preventDefault(); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+render();
+</script>
+</body>
+</html>
