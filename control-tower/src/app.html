@@ -17,24 +17,25 @@
     --brand:#5fc79a; --brand2:#f0c55a; --accent:#5cc8e6; --chip:#1f2a25;
     --red:#ff8a80; --redbg:#3a1d1b; --amber:#f5c25b; --amberbg:#352a12; --green:#6fdba6; --greenbg:#15302a;
     --grey:#7f8a85; --greybg:#1c2320;
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.3);
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.3); color-scheme:dark;
   }}
   :root[data-theme="dark"]{
     --bg:#0f1513; --panel:#17201c; --ink:#e7eeea; --muted:#9db0a6; --line:#26332d;
     --brand:#5fc79a; --brand2:#f0c55a; --accent:#5cc8e6; --chip:#1f2a25;
     --red:#ff8a80; --redbg:#3a1d1b; --amber:#f5c25b; --amberbg:#352a12; --green:#6fdba6; --greenbg:#15302a;
-    --grey:#7f8a85; --greybg:#1c2320;
+    --grey:#7f8a85; --greybg:#1c2320; color-scheme:dark;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
   a{color:var(--accent)}
-  header{background:#0d5c3d;color:#fff;padding:14px 16px}
+  header{background:#0d5c3d;color:#fff;padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
   header .wrap{max-width:1180px;margin:0 auto;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
   header h1{margin:0;font-size:19px;letter-spacing:.2px}
   header h1 span{color:#f0c55a}
   header .sub{font-size:13px;opacity:.85}
-  main{max-width:1180px;margin:0 auto;padding:12px 16px 80px}
-  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
+  main{max-width:1180px;margin:0 auto;padding-block:12px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:8px 0;z-index:5}
   nav.tabs button{background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:8px 13px;border-radius:999px;cursor:pointer;font:inherit;font-size:14px}
   nav.tabs button.on{background:var(--brand);border-color:var(--brand);color:#fff}
   :root[data-theme="dark"] nav.tabs button.on{color:#0f1513}
@@ -73,6 +74,7 @@
   button.b.primary{background:var(--brand);border-color:var(--brand);color:#fff}
   :root[data-theme="dark"] button.b.primary{color:#0f1513}
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.b.primary{color:#0f1513}}
+  button.b.danger{background:var(--red);border-color:var(--red);color:var(--panel)}
   button.b.ghost{border-color:transparent;background:transparent;color:var(--accent)}
   input[type=checkbox]{width:18px;height:18px;margin-top:3px;flex:none;accent-color:var(--brand)}
   .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
@@ -122,12 +124,14 @@
   #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;max-width:90vw}
   #toast.show{opacity:1}
   .rules li{margin:5px 0}
+  .ask{width:100%;min-height:90px;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+  .save-state{font-size:12px;opacity:.85}
   .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:var(--chip);padding:1px 5px;border-radius:5px}
   @media print{nav.tabs,header,.acts,button{display:none!important}.card{box-shadow:none}}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>Project <span>Control Tower</span></h1><div class="sub" id="hdrSub">Your tracker, checked every morning.</div></div></header>
+<header><div class="wrap"><h1>Project <span>Control Tower</span></h1><div class="sub" id="hdrSub">Your tracker, checked every morning.</div><div class="save-state" id="saveState"></div></div></header>
 <main>
   <nav class="tabs" id="tabs"></nav>
   <div id="view"></div>
@@ -166,6 +170,10 @@ const SCHEMA = {
   plan: { sheet:'Plan', label:'Plan', title:'task', fields:{
     id:'ID', date:'Date', week:'Week', who:'Who', task:'Task', done:'Done', notes:'Notes' },
     dates:['date'], nums:['id'], skip:[] },
+  feedback: { sheet:'Feedback log', label:'Feedback', title:'comment', fields:{
+    id:'ID', date:'Date', source:'Source', comment:'Comment', doc:'Document', section:'Section', status:'Status',
+    handling:'How handled', decided:'Decided by', notes:'Notes' },
+    dates:['date'], nums:['id'], skip:[] },
 };
 const KINDS = Object.keys(SCHEMA);
 const CLOSED = ['Done','Dropped'];
@@ -174,23 +182,71 @@ const DEFAULT_LISTS = {
   status:['To confirm','Not started','In progress','Waiting on others','Done','Dropped'],
   parts:['1 Opening position','2 Route to 100M','3 Validated pathways','4 Investable pipeline','5 Delivery contributions','6 Jobs estimates','7 Inclusion','8 Partnerships and mobilisation','9 Delivery and verification','Position Paper','Several'],
   stages:['Not contacted','Introduction requested','Introduction made','Scheduled','Held','Write-up done','Dropped'],
-  sessionStatus:['Not requested','Requested','Scheduled','Held','Write-up done','Cancelled'] };
-const LIST_HEADERS = { owners:'Owners', types:'Types', status:'Status', parts:'Parts', stages:'Stages', sessionStatus:'SessionStatus' };
+  sessionStatus:['Not requested','Requested','Scheduled','Held','Write-up done','Cancelled'],
+  feedbackStatus:['Open','Needs decision','Reflected','Not taken (reason recorded)'], docs:['Position Paper','Action Plan','Both','Summary deck'] };
+const LIST_HEADERS = { owners:'Owners', types:'Types', status:'Status', parts:'Parts', stages:'Stages', sessionStatus:'SessionStatus', feedbackStatus:'FeedbackStatus', docs:'Documents' };
 
 function blank(){
-  return { v:1, tracker:[], interviews:[], sessions:[], plan:[], lists:structuredClone(DEFAULT_LISTS),
+  return { v:1, tracker:[], interviews:[], sessions:[], plan:[], feedback:[], lists:structuredClone(DEFAULT_LISTS),
     notes:[], history:[], file:null,
     settings:{ me:'Miriam', keeper:'Delali', team:['Delali','Salia'], soonDays:2, staleDays:3, interviewTarget:10, rmcTarget:16 },
     ui:{ tab:'today', person:'Delali', tf:{ q:'', status:'open', type:'', part:'', owner:'', flag:'' }, planWho:'', planShowDone:false } };
 }
 let S = load();
 function load(){
-  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.v===1){ const b=blank(); return {...b, ...s, settings:{...b.settings,...s.settings}, ui:{...b.ui,...s.ui, tf:{...b.ui.tf,...(s.ui||{}).tf}}}; } }catch(e){}
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.v===1){ const b=blank(); return {...b, ...s, lists:{...b.lists,...s.lists}, settings:{...b.settings,...s.settings}, ui:{...b.ui,...s.ui, tf:{...b.ui.tf,...(s.ui||{}).tf}}}; } }catch(e){}
   return blank();
 }
-function save(){
+function save(now){
+  S.savedAt=Date.now();
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }
-  catch(e){ toast('This browser would not save your changes ('+e.name+'). Download a backup from the Data tab.'); }
+  catch(e){ if(!CLOUD) toast('This browser would not save your changes ('+e.name+'). Download a backup from the Data tab.'); }
+  queueCloud(now);
+}
+/* Private cloud copy when the tool runs as a Claude page: kept under your own account,
+   readable only by you. In a plain browser this does nothing and localStorage is used. */
+let CLOUD=null, cloudTimer=null, cloudBusy=false, cloudAgain=false, saveState='';
+function setSaveState(t){ saveState=t; const el=document.getElementById('saveState'); if(el) el.textContent=t; }
+function queueCloud(now){ if(!CLOUD) return; clearTimeout(cloudTimer); setSaveState('Saving…'); cloudTimer=setTimeout(pushCloud, now?0:1200); }
+async function pushCloud(){
+  if(cloudBusy){ cloudAgain=true; return; } cloudBusy=true;
+  try{
+    const { file, history, ...rest }=S;
+    const meta=file?{...file,b64:undefined}:null;
+    await CLOUD.state.set({ v:1, savedAt:S.savedAt, json:JSON.stringify({...rest,file:meta}) });
+    const b64=file?.b64||'';
+    if(b64!==CLOUD.lastB64){ await CLOUD.wb.set({ b64 }); CLOUD.lastB64=b64; }
+    const hj=JSON.stringify(history.slice(-500));
+    if(hj!==CLOUD.lastHist){ await CLOUD.hist.set({ json:hj }); CLOUD.lastHist=hj; }
+    setSaveState('Saved to your account');
+  }catch(e){ setSaveState('Not saved to your account: '+(e&&e.code||'error')+'. Changes are kept in this browser.'); }
+  cloudBusy=false; if(cloudAgain){ cloudAgain=false; pushCloud(); }
+}
+async function initCloud(){
+  if(!(window.claude && typeof window.claude.use==='function')) return;
+  try{
+    const [db,user,dl]=await Promise.all([claude.use('db'),claude.use('user'),claude.use('downloads')]);
+    DL=dl||null;
+    if(!db || !user){ setSaveState('Saved in this browser only'); return; }
+    const id=await user.id(); if(!id){ setSaveState('Saved in this browser only'); return; }
+    const col=db.collection('data/users/'+id);
+    const refs={ state:col.doc('state'), wb:col.doc('workbook'), hist:col.doc('history') };
+    const snap=await refs.state.get();
+    if(snap.exists){
+      const d=snap.data();
+      if((d.savedAt||0) > (S.savedAt||0)){
+        const rest=JSON.parse(d.json); const [w,h]=await Promise.all([refs.wb.get(),refs.hist.get()]);
+        const b64=w.exists?w.data().b64:''; const hist=h.exists?JSON.parse(h.data().json||'[]'):[];
+        const b=blank(); S={...b,...rest,lists:{...b.lists,...rest.lists},settings:{...b.settings,...rest.settings},ui:{...b.ui,...rest.ui,tf:{...b.ui.tf,...(rest.ui||{}).tf}},history:hist,savedAt:d.savedAt};
+        if(S.file) S.file.b64=b64;
+        refs.lastB64=b64; refs.lastHist=JSON.stringify(hist);
+        try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+        CLOUD=refs; setSaveState('Saved to your account'); render(); return;
+      }
+    }
+    CLOUD=refs;
+    if(S.tracker.length) await pushCloud(); else setSaveState('Saved to your account');
+  }catch(e){ setSaveState('Saved in this browser only'); }
 }
 
 /* ---------- Dates ---------- */
@@ -234,6 +290,15 @@ async function copy(text){
 }
 function bufToB64(u8){ let s=''; for(let i=0;i<u8.length;i+=0x8000) s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000)); return btoa(s); }
 function b64ToBuf(b){ const s=atob(b), u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+function say(msg,head){ openDlg(head||'Something needs attention','<p>'+esc(msg)+'</p>',[['OK',closeDlg,'primary']]); }
+function confirmDlg(msg,okLabel,fn,danger){ openDlg('Please confirm','<p>'+esc(msg)+'</p>',[['Cancel',closeDlg],[okLabel,()=>{ closeDlg(); fn(); },danger?'danger':'primary']]); }
+function askDlg(head,label,initial,fn){ openDlg(head,'<label class="small muted" for="askIn">'+esc(label)+'</label><textarea class="ask" id="askIn">'+esc(initial||'')+'</textarea>',[['Cancel',closeDlg],['Add',()=>{ const v=$('#askIn').value.trim(); closeDlg(); if(v) fn(v); },'primary']]); setTimeout(()=>{ const a=$('#askIn'); if(a){ a.focus(); a.setSelectionRange(a.value.length,a.value.length);} },50); }
+/* Saving a file: inside a Claude page the viewer confirms each save; in a plain browser it downloads directly. */
+let DL=null;
+async function saveFile(name,data,type){
+  if(DL){ try{ await DL.save({filename:name,data}); return true; }catch(e){ if(e && e.code==='declined') { toast('Not saved.'); return false; } say('The file could not be saved here ('+(e&&e.message||e)+').'); return false; } }
+  download(name,data,type); return true;
+}
 function download(name, data, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
 
 /* ==========================================================================
@@ -400,8 +465,8 @@ function baseOf(kind,r){ const b={}; for(const f of fieldsOf(kind)) b[f]=r[f]??'
 
 async function importBuffer(buf,name){
   let data;
-  try{ data=await parseWorkbook(buf); }catch(e){ alert('Could not read that file: '+e.message); return; }
-  if(!data.tracker){ alert('No "Tracker" tab with an "Item" column was found in '+name+'. Is this the project tracker?'); return; }
+  try{ data=await parseWorkbook(buf); }catch(e){ say('Could not read that file: '+e.message); return; }
+  if(!data.tracker){ say('No "Tracker" tab with an "Item" column was found in '+name+'. Is this the project tracker?'); return; }
   const fileInfo={ name, b64:bufToB64(new Uint8Array(buf)), importedAt:Date.now() };
   const firstTime=!S.file && !S.tracker.length;
   const changes=[];
@@ -534,7 +599,23 @@ function planFlags(r){
   if(n<0 && r.who==='Meeting') return [{lvl:'amber',code:'held?',text:'Held? Tick it and log the write-up'}];
   return [];
 }
-const FLAGS={ tracker:trackerFlags, interviews:interviewFlags, sessions:sessionFlags, plan:planFlags };
+function reviewPoints(){ return milestones().filter(m=>/review point/i.test(m.task)).map(m=>m.date); }
+const fbOpen = r => /^(open|needs)/i.test(r.status||'Open');
+function feedbackFlags(r){
+  const f=[]; const st=r.status||'Open';
+  if(/^not taken/i.test(st) && !r.handling) f.push({lvl:'amber',code:'reason',text:'Record why it was not taken'});
+  if(/reflected/i.test(st) && !r.handling) f.push({lvl:'info',code:'how',text:'Say how it was handled'});
+  if(fbOpen(r)){
+    const rp=reviewPoints(), past=rp.filter(d=>d<TODAY && d>=(r.date||'0')).pop(), next=rp.find(d=>d>=TODAY);
+    if(past) f.push({lvl:'red',code:'missedrp',text:'Still open after the '+fmt(past,false)+' review point'});
+    else if(next && diff(next,TODAY)<=S.settings.soonDays) f.push({lvl:'amber',code:'rpsoon',text:'Review point '+rel(next)+': reflect it or explain why not'});
+    if(/needs decision/i.test(st)) f.push({lvl:'amber',code:'decide',text:'Needs a decision from '+S.settings.me});
+  }
+  if(!r.section) f.push({lvl:'info',code:'nosection',text:'No section given'});
+  if(!r.source) f.push({lvl:'info',code:'nosource',text:'No source'});
+  return f;
+}
+const FLAGS={ tracker:trackerFlags, interviews:interviewFlags, sessions:sessionFlags, plan:planFlags, feedback:feedbackFlags };
 function worst(fl){ return fl.some(x=>x.lvl==='red')?'red':fl.some(x=>x.lvl==='amber')?'amber':''; }
 function flagTags(fl){ return fl.map(x=>'<span class="tag '+(x.lvl==='crit'?'crit':x.lvl)+'">'+esc(x.text)+'</span>').join(''); }
 function has(fl,code){ return fl.some(x=>x.code===code); }
@@ -542,14 +623,14 @@ function has(fl,code){ return fl.some(x=>x.code===code); }
 /* ==========================================================================
    Rendering
    ========================================================================== */
-const TABS=[['today','Today'],['team','Team prompts'],['tracker','Tracker'],['meetings','Interviews & sessions'],['plan','Plan & health'],['data','Data']];
+const TABS=[['today','Today'],['team','Team prompts'],['tracker','Tracker'],['meetings','Interviews & sessions'],['feedback','Feedback log'],['plan','Plan & health'],['data','Data']];
 function render(){
   const red=S.tracker.filter(r=>has(trackerFlags(r),'overdue')).length;
   $('#tabs').innerHTML=TABS.map(([k,l])=>'<button data-tab="'+k+'" class="'+(S.ui.tab===k?'on':'')+'">'+l+(k==='tracker'&&red?'<span class="count">'+red+'</span>':'')+'</button>').join('');
   $('#hdrSub').textContent = S.file ? fmt(TODAY)+' · '+S.file.name+' · loaded '+new Date(S.file.importedAt).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : 'Your tracker, checked every morning.';
   const v=$('#view');
   if(!S.tracker.length && S.ui.tab!=='data'){ v.innerHTML=welcome(); bindDrop(); return; }
-  v.innerHTML=({today:viewToday,team:viewTeam,tracker:viewTracker,meetings:viewMeetings,plan:viewPlan,data:viewData}[S.ui.tab]||viewToday)();
+  v.innerHTML=({today:viewToday,team:viewTeam,tracker:viewTracker,meetings:viewMeetings,feedback:viewFeedback,plan:viewPlan,data:viewData}[S.ui.tab]||viewToday)();
   bindDrop();
 }
 function welcome(){
@@ -574,11 +655,13 @@ function viewToday(){
   let h='<div class="card"><div class="hero"><div class="big">'+fmt(TODAY)+'</div>'
     +(wk?'<div class="muted">'+esc(wk)+'</div>':'')
     +(next?'<div>Next milestone <b>'+esc(fmt(next.date))+'</b> ('+rel(next.date)+'): '+esc(next.task)+'</div>':'')
-    +(last && last.date>=TODAY?'<div class="muted">'+diff(last.date,TODAY)+' days to '+esc(fmt(last.date))+'</div>':'')+'</div>'
+    +(last && last.date>=TODAY?'<div class="muted">'+diff(last.date,TODAY)+' days to '+esc(fmt(last.date))+'</div>':'')
+    +'<span class="spacer"></span><button class="b '+(dow(TODAY)===5?'primary':'')+'" data-weekly="1">Weekly summary</button></div>'
     +'<div class="tiles">'
     +tile(overdue.length,'Overdue','red','overdue')+tile(soon.length,'Due in '+S.settings.soonDays+' days','amber','soon')
     +tile(bank.length,'Waiting on the Bank','','bank')+tile(toConfirm.length,'Still "To confirm"','amber','confirm')
     +tile(wu.length,'Write-ups due',wu.length?'red':'green','go:meetings')+tile(unticked.length,'Plan tasks not ticked',unticked.length?'amber':'green','go:plan')
+    +tile(S.feedback.filter(fbOpen).length,'Feedback to reflect',S.feedback.some(r=>worst(feedbackFlags(r))==='red')?'red':'','go:feedback')
     +'</div></div>';
 
   // Your list
@@ -588,6 +671,8 @@ function viewToday(){
   const carry=S.plan.filter(r=>r.who===me && has(planFlags(r),'unticked'));
   let li='';
   for(const r of todayPlan) li+=planLi(r);
+  for(const r of S.sessions.filter(r=>r.date===TODAY)) li+='<li><span class="dot blue"></span><div class="body"><div class="t">'+esc(r.session)+'</div><div class="m">Session today · '+esc(r.status)+(r.notes?' · '+esc(r.notes):'')+'</div></div><div class="acts"><button class="b ghost" data-edit="sessions:'+esc(keyOf(r))+'">Edit</button></div></li>';
+  for(const r of S.interviews.filter(r=>r.date===TODAY)) li+='<li><span class="dot blue"></span><div class="body"><div class="t">Interview: '+esc(r.name)+' ('+esc(r.org)+')</div><div class="m">Today · brief '+(yes(r.brief)?'done':'not done')+'</div></div><div class="acts"><button class="b ghost" data-edit="interviews:'+esc(keyOf(r))+'">Edit</button></div></li>';
   for(const r of mine) li+=trackerLi(r,fl.get(r));
   for(const r of carry) li+=planLi(r,true);
   h+='<div class="grid two"><div class="card"><h2>Your list for today</h2><p class="why">Your plan for today, items where you act next that are overdue or due soon, and earlier plan tasks you have not ticked.</p>'
@@ -653,6 +738,8 @@ function teamItems(p){
       if(asks.length) add('hygiene','#'+r.id+' '+r.item+': '+asks.join('; '),r); }
     for(const r of S.interviews){ const fl=interviewFlags(r).filter(x=>x.lvl!=='info'); if(fl.length) add('meet','Interview: '+r.name+' ('+r.org+'): '+fl.map(x=>x.text.toLowerCase()).join('; ')); }
     for(const r of S.sessions){ const fl=sessionFlags(r).filter(x=>x.lvl!=='info'); if(fl.length) add('meet','Session: '+r.session+': '+fl.map(x=>x.text.toLowerCase()).join('; ')); }
+    if(!S.feedback.length) add('feedback','The feedback log is still empty. Please start it from the call notes: date, source, comment, section, status.');
+    for(const r of S.feedback){ const fl=feedbackFlags(r).filter(x=>x.lvl!=='info'); if(fl.length) add('feedback','#'+r.id+' '+r.comment.slice(0,90)+(r.comment.length>90?'…':'')+' ('+(r.source||'no source')+'): '+fl.map(x=>x.text.toLowerCase()).join('; ')); }
     for(const r of S.plan.filter(r=>r.who==='Meeting' && has(planFlags(r),'held?'))) add('meet','Meeting '+fmt(r.date)+': '+r.task.replace(/^\d{1,2}:\d{2}\s*/,'')+': write-up done and logged in Sessions?');
   }
   const tm=nextWorkday(TODAY);
@@ -661,7 +748,7 @@ function teamItems(p){
   if(keeper && dow(TODAY)===5) add('today','Send me your three lines: what was done this week, what is late, what you need.');
   return out;
 }
-const SECS={ today:'For today', items:'Your items that are due or overdue', confirm:'Please confirm these are done, or tell me what is blocking', meet:'Meetings and write-ups', hygiene:'Tracker fixes', tomorrow:'Tomorrow', notes:'From me' };
+const SECS={ today:'For today', items:'Your items that are due or overdue', confirm:'Please confirm these are done, or tell me what is blocking', meet:'Meetings and write-ups', feedback:'Feedback log', hygiene:'Tracker fixes', tomorrow:'Tomorrow', notes:'From me' };
 function teamMessage(p,items){
   let s='Hi '+p+', here is the list for '+fmt(TODAY)+'.\n';
   for(const [k,label] of Object.entries(SECS)){ const it=items.filter(x=>x.sec===k); if(!it.length) continue;
@@ -675,7 +762,7 @@ function viewTeam(){
     +'<p class="why">What to ask '+esc(p)+' to do and check, built from the plan, the tracker and your notes. '+(p===S.settings.keeper?esc(p)+' keeps the tracker, so tracker fixes and write-ups are included. ':'')+'Edit the message, then copy it into Teams, WhatsApp or email.</p></div>';
   h+='<div class="grid two"><div class="card">';
   for(const [k,label] of Object.entries(SECS)){ const it=items.filter(x=>x.sec===k); if(!it.length) continue;
-    h+='<h3>'+esc(label)+' · '+it.length+'</h3><ul class="list">'+it.map(x=>'<li><span class="dot '+(k==='confirm'||k==='hygiene'?'amber':k==='items'?'red':k==='notes'?'green':'blue')+'"></span><div class="body">'+esc(x.text)+'</div>'
+    h+='<h3>'+esc(label)+' · '+it.length+'</h3><ul class="list">'+it.map(x=>'<li><span class="dot '+(k==='confirm'||k==='hygiene'||k==='feedback'?'amber':k==='items'?'red':k==='notes'?'green':'blue')+'"></span><div class="body">'+esc(x.text)+'</div>'
       +(k==='notes'?'<div class="acts"><button class="b ghost" data-notedone="'+esc(x.text)+'">Remove</button></div>':'')+'</li>').join('')+'</ul>'; }
   if(!items.length) h+='<div class="empty">Nothing to ask '+esc(p)+' right now.</div>';
   h+='<h3>Add a note for '+esc(p)+'</h3><div class="row"><input id="noteIn" style="flex:1;min-width:200px;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)" placeholder="e.g. Book the room for Thursday\'s interview"><button class="b primary" id="noteAdd">Add</button></div>'
@@ -735,14 +822,60 @@ function table(kind,rows,cols,flagFn){
   const sc=SCHEMA[kind];
   const sorted=[...rows].sort((a,b)=>{ const x=worst(flagFn(a))?0:1, y=worst(flagFn(b))?0:1; return x-y || (+a.id||0)-(+b.id||0); });
   return '<div class="tablewrap"><table><thead><tr>'+cols.map(c=>'<th>'+esc(sc.fields[c])+'</th>').join('')+'</tr></thead><tbody>'
-    +sorted.map(r=>{ const fl=flagFn(r), w=worst(fl); return '<tr class="'+(w==='red'?'r':w==='amber'?'a':'')+'" data-edit="'+kind+':'+esc(keyOf(r))+'">'+cols.map((c,i)=>'<td class="'+(c==='id'?'id':sc.dates.includes(c)?'nowrap':'')+'">'+esc(sc.dates.includes(c)?fmt(r[c]):r[c])+(i===1?'<div>'+flagTags(fl)+'</div>':'')+'</td>').join('')+'</tr>'; }).join('')
+    +sorted.map(r=>{ const fl=flagFn(r), w=worst(fl); return '<tr class="'+(w==='red'?'r':w==='amber'?'a':'')+'" data-edit="'+kind+':'+esc(keyOf(r))+'">'+cols.map((c,i)=>'<td class="'+(c==='id'?'id':sc.dates.includes(c)?'nowrap':'')+'">'+esc(sc.dates.includes(c)?fmt(r[c]):r[c])+(c===sc.title?'<div>'+flagTags(fl)+'</div>':'')+'</td>').join('')+'</tr>'; }).join('')
     +'</tbody></table></div>';
 }
+
+/* ---------- FEEDBACK LOG ---------- */
+function viewFeedback(){
+  const F=S.feedback, rp=reviewPoints(), next=rp.find(d=>d>=TODAY);
+  const n=st=>F.filter(r=>(r.status||'Open')===st).length;
+  const open=F.filter(fbOpen);
+  let h='<div class="card"><h2>Feedback log</h2><p class="why">Every comment on the Position Paper and Action Plan: call notes, Big Win, partners and the Bank. Before each review point, every comment must be reflected in the draft or have a recorded reason why not.</p>'
+    +'<div class="funnel">'+(S.lists.feedbackStatus||DEFAULT_LISTS.feedbackStatus).map(st=>'<div><b>'+n(st)+'</b>'+esc(st)+'</div>').join('')+'</div>'
+    +(next?'<p>Next review point <b>'+esc(fmt(next))+'</b> ('+rel(next)+'): <b>'+open.length+'</b> comment'+(open.length===1?'':'s')+' still to reflect or explain.</p>':'')
+    +'<div class="row" style="margin-bottom:8px"><span class="spacer"></span><button class="b primary" data-new="feedback">+ New comment</button></div>'
+    +(F.length?table('feedback',F,['id','date','source','comment','doc','section','status','handling'],feedbackFlags)
+      :'<div class="empty">No comments logged yet. Add them here, or in the "Feedback log" tab of the workbook, and they will appear after the next load.</div>')
+    +'</div>';
+  return h;
+}
+/* ---------- WEEKLY SUMMARY ---------- */
+function weeklySummary(){
+  const d=dow(TODAY), mon=addDays(TODAY, d===0?-6:1-d), fri=addDays(mon,4), nmon=addDays(mon,7), nfri=addDays(mon,11);
+  const inW=x=>x && x>=mon && x<=addDays(fri,2);
+  const T=S.tracker, open=T.filter(isOpen);
+  const late=open.filter(r=>has(trackerFlags(r),'overdue')).sort((a,b)=>a.due<b.due?-1:1);
+  const bank=open.filter(bankOwes);
+  const done=T.filter(r=>r.status==='Done' && inW(r.updated));
+  const ms=milestones(), nextMs=ms.find(m=>m.date>=TODAY && !yes(m.done));
+  const wk=S.plan.find(r=>r.date>=mon && r.date<=fri)?.week;
+  const L=(arr,f,max=10)=>arr.length?arr.slice(0,max).map(x=>'• '+f(x)).join('\n')+(arr.length>max?'\n• …and '+(arr.length-max)+' more':''):'• None';
+  const heldI=S.interviews.filter(r=>/held|write-up/i.test(r.stage)).length;
+  const heldW=[...S.sessions.filter(r=>inW(r.date) && /held|write-up/i.test(r.status)).map(r=>r.session),...S.interviews.filter(r=>inW(r.date) && /held|write-up/i.test(r.stage)).map(r=>'Interview: '+r.name+' ('+r.org+')')];
+  const rmc=S.sessions.filter(r=>/rmc/i.test(r.type||'')), nom=rmc.filter(r=>r.country && !/to be nominated/i.test(r.country)).length;
+  const dec=T.filter(r=>/decision/i.test(r.type||''));
+  const fbO=S.feedback.filter(fbOpen).length, fbR=S.feedback.filter(r=>/reflected|not taken/i.test(r.status||'')).length;
+  const nextUp=[...ms.filter(m=>m.date>=nmon && m.date<=nfri).map(m=>({d:m.date,t:'Milestone: '+m.task})),
+    ...S.sessions.filter(r=>r.date>=nmon && r.date<=nfri).map(r=>({d:r.date,t:r.session})),
+    ...open.filter(r=>r.due>=nmon && r.due<=nfri).map(r=>({d:r.due,t:'#'+r.id+' '+r.item+' ('+firstName(r.owner)+')'}))].sort((a,b)=>a.d<b.d?-1:1);
+  return 'Weekly summary: '+(wk?wk+', ':'')+fmt(mon,false)+'–'+fmt(fri,false)+'\n\n'
+    +'Headline\n• '+open.length+' open items; '+late.length+' overdue; '+bank.length+' waiting on the Bank.\n'
+    +(nextMs?'• Next milestone: '+fmt(nextMs.date)+', '+nextMs.task+'\n':'')
+    +'\nDone this week\n'+L([...ms.filter(m=>inW(m.date) && yes(m.done)).map(m=>'Milestone: '+m.task),...done.map(r=>'#'+r.id+' '+r.item),...heldW],x=>x,14)+'\n'
+    +'\nLate\n'+L(late,r=>'#'+r.id+' '+r.item+' | '+r.owner+' | due '+fmt(r.due,false)+' ('+(-diff(r.due,TODAY))+(diff(r.due,TODAY)===-1?' day)':' days)'))+'\n'
+    +'\nWaiting on the Bank ('+bank.length+')\n'+L(bank,r=>'#'+r.id+' '+r.item+' | '+r.owner+(r.due?' | due '+fmt(r.due,false):''),8)+'\n'
+    +(dec.length?'\nManagement decisions\n'+L(dec,r=>r.item+': '+r.status+(r.due?' (sought by '+fmt(r.due,false)+')':''))+'\n':'')
+    +'\nConsultations\n• Interviews held: '+heldI+' of '+S.settings.interviewTarget+' targeted\n• RMC sessions listed: '+rmc.length+' of about '+S.settings.rmcTarget+'; countries nominated: '+nom+'\n'
+    +'\nFeedback log\n• '+fbO+' open, '+fbR+' reflected or explained'+(reviewPoints().find(x=>x>=TODAY)?'; next review point '+fmt(reviewPoints().find(x=>x>=TODAY)):'')+'\n'
+    +'\nNext week\n'+L(nextUp,x=>fmt(x.d)+': '+x.t,14)+'\n';
+}
+function openWeekly(){ openDlg('Weekly summary','<p class="why">Built from the tracker, plan, sessions and feedback log. Edit it, then copy it into an email or Teams.</p><textarea class="msg" id="weeklyTxt" style="min-height:360px">'+esc(weeklySummary())+'</textarea>',[['Close',closeDlg],['Copy',()=>copy($('#weeklyTxt').value),'primary']]); }
 
 /* ---------- PLAN & HEALTH ---------- */
 function viewPlan(){
   const ms=milestones(), nextMs=ms.find(m=>m.date>=TODAY && !yes(m.done));
-  let h='<div class="card"><h2>Milestones</h2>'+(ms.length?'<div class="timeline">'+ms.map(m=>'<div class="ms '+(m===nextMs?'next':m.date<TODAY||yes(m.done)?'past':'')+'"><div class="d">'+esc(fmt(m.date))+'</div>'+esc(m.task)+'</div>').join('')+'</div>':'<div class="empty">No milestones. Add rows with Who = "Milestone" to the Plan tab of your workbook.</div>')+'</div>';
+  let h='<div class="card"><div class="row"><h2 class="spacer">Milestones</h2><button class="b" data-weekly="1">Weekly summary</button></div>'+(ms.length?'<div class="timeline">'+ms.map(m=>'<div class="ms '+(m===nextMs?'next':m.date<TODAY||yes(m.done)?'past':'')+'"><div class="d">'+esc(fmt(m.date))+'</div>'+esc(m.task)+'</div>').join('')+'</div>':'<div class="empty">No milestones. Add rows with Who = "Milestone" to the Plan tab of your workbook.</div>')+'</div>';
   // Health by Action Plan part
   const parts=[...new Set([...(S.lists.parts||[]),...S.tracker.map(r=>r.part).filter(Boolean)])];
   h+='<div class="card"><h2>Action Plan health</h2><p class="why">Every tracker item feeds one of the nine results (or the Position Paper). Red: two or more overdue, or an overdue critical-path item. Amber: anything overdue, or due within '+S.settings.soonDays+' days. Click a box to see its items.</p><div class="health">'
@@ -800,6 +933,7 @@ function viewData(){
     +'<li><b>Critical path</b>: the Notes mention "critical path". One overdue critical item turns its Action Plan part red.</li>'
     +'<li><b>Who acts next</b>: the Owner, plus anyone named in "Next step" as "<span class="kbd">Name to …</span>" or "<span class="kbd">Name drafts …</span>". For example, "Miriam to chase" puts a Bank-owned item on your list.</li>'
     +'<li><b>Write-ups</b>: an interview or session that has been held needs a write-up within 24 hours. After a day it turns red.</li>'
+    +'<li><b>Feedback log</b>: a comment still Open or Needs decision turns amber when a review point (a milestone named "review point") is within '+S.settings.soonDays+' days, and red once that review point has passed. "Not taken" needs a recorded reason.</li>'
     +'<li><b>Plan</b>: a task from an earlier day that is not ticked goes into that person\'s "please confirm" list. Past meetings ask for the write-up.</li>'
     +'</ul></div>';
   return h;
@@ -812,6 +946,7 @@ const FIELD_UI={
   tracker:{ item:['Item','text','full'], type:['Type','list:types'], part:['Action Plan part','list:parts'], owner:['Owner','list:owners'], status:['Status','list:status'], due:['Due date','date'], next:['Next step','area','full'], notes:['Notes and links','area','full'], updated:['Last updated','date'] },
   interviews:{ name:['Interviewee','text','full'], org:['Organisation','text'], pathway:['Pathway','text'], route:['Route and owner','text'], stage:['Stage','list:stages'], date:['Interview date','date'], brief:['Brief done','yn'], writeup:['Write-up done','yn'], next:['Next step','area','full'], notes:['Notes','area','full'] },
   sessions:{ session:['Session','text','full'], type:['Type','text'], hub:['Hub or department','text'], country:['Country','text'], by:['Convened by','text'], status:['Status','list:sessionStatus'], date:['Date','date'], writeup:['Write-up done','yn'], notes:['Notes','area','full'] },
+  feedback:{ comment:['Comment','area','full'], source:['Source (who, which call or document)','text'], date:['Date','date'], doc:['Document','list:docs'], section:['Section','text'], status:['Status','list:feedbackStatus'], decided:['Decided by','text'], handling:['How handled (or why not)','area','full'], notes:['Notes','area','full'] },
   plan:{ task:['Task','area','full'], date:['Date','date'], who:['Who','text'], done:['Done','yn'], notes:['Notes','area','full'] },
 };
 function field(kind,f,val){
@@ -834,24 +969,25 @@ function openEdit(kind,key){
     if(kind==='tracker'){ r.status='Not started'; r.owner=S.settings.me; r.due=addWorkdays(TODAY,2); }
     if(kind==='interviews'){ r.stage='Not contacted'; r.brief='No'; r.writeup='No'; }
     if(kind==='sessions'){ r.status='Not requested'; r.writeup='No'; }
-    if(kind==='plan'){ r.date=TODAY; r.who=S.settings.me; r.done='No'; } }
+    if(kind==='plan'){ r.date=TODAY; r.who=S.settings.me; r.done='No'; }
+    if(kind==='feedback'){ r.date=TODAY; r.status='Open'; } }
   let body='<div class="form">'+Object.keys(FIELD_UI[kind]).map(f=>field(kind,f,r[f]??'')).join('')+'</div>';
   if(!isNew){ const fl=FLAGS[kind](r); if(fl.length) body='<div style="margin-bottom:10px">'+flagTags(fl)+'</div>'+body;
     const hist=S.history.filter(x=>x.kind===kind && String(x.id)===String(r.id)).slice(-8).reverse();
     if(hist.length) body+='<h3 style="font-size:13px;color:var(--muted);margin:16px 0 4px">History</h3>'+changeList(hist); }
   const saveIt=()=>{ let changed=false;
     for(const f of Object.keys(FIELD_UI[kind])){ const el=$('#f_'+f); if(!el) continue; let v=el.value.trim(); if(isNew) r[f]=v; else changed=setField(kind,r,f,v)||changed; }
-    if(isNew){ if(!r[SCHEMA[kind].title]){ alert('Please fill in '+FIELD_UI[kind][SCHEMA[kind].title][0]+'.'); return false; }
+    if(isNew){ if(!r[SCHEMA[kind].title]){ toast('Please fill in '+FIELD_UI[kind][SCHEMA[kind].title][0]+'.'); return 'keep'; }
       if(kind==='tracker') r.updated=TODAY; r._edited=Date.now(); S[kind].push(r); logH(kind,r,'(new)','','added','tool'); changed=true; }
     if(changed){ save(); render(); toast('Saved'); } return true; };
   const btns=[['Cancel',()=>closeDlg()]];
   if(kind==='tracker' && !isNew){
-    btns.unshift(['Ask '+S.settings.keeper+' about this',()=>{ const q=prompt('What should '+S.settings.keeper+' check or do about #'+r.id+'?','Please check and update: '); if(q){ S.notes.push({who:S.settings.keeper,text:'#'+r.id+' '+r.item+': '+q,created:Date.now()}); save(); toast('Added to '+S.settings.keeper+'\'s prompts'); } }]);
+    btns.unshift(['Ask '+S.settings.keeper+' about this',()=>{ askDlg('Ask '+S.settings.keeper+' about #'+r.id,'What should '+S.settings.keeper+' check or do?','Please check and update: ',q=>{ S.notes.push({who:S.settings.keeper,text:'#'+r.id+' '+r.item+': '+q,created:Date.now()}); save(); toast('Added to '+S.settings.keeper+'\'s prompts'); }); }]);
     btns.unshift(['+1 week',()=>{ $('#f_due').value=addDays($('#f_due').value||TODAY,7); }]);
     btns.unshift(['+2 working days',()=>{ $('#f_due').value=addWorkdays($('#f_due').value||TODAY,2); }]);
     btns.unshift(['Chased today',()=>{ const n=$('#f_notes'); n.value=(n.value?n.value.replace(/\s*$/,' '):'')+'Chased '+fmt(TODAY,false)+'.'; }]);
   }
-  btns.push([isNew?'Add':'Save',()=>{ if(saveIt()!==false) closeDlg(); },'primary']);
+  btns.push([isNew?'Add':'Save',()=>{ if(saveIt()!=='keep') closeDlg(); },'primary']);
   openDlg((isNew?'New ':'')+SCHEMA[kind].label.replace(/s$/,'')+(isNew?'':' #'+r.id), body, btns);
 }
 function openDlg(t,body,btns){
@@ -890,6 +1026,7 @@ document.addEventListener('click',async e=>{
   if(d.email){ const txt=emailFor(d.email); openDlg('Reminder to '+d.email,'<p class="why">A draft only. Nothing is sent from here. Copy it into Outlook and adjust as needed.</p><textarea class="msg" id="emailTxt">'+esc(txt)+'</textarea>',[['Close',closeDlg],['Copy',()=>copy($('#emailTxt').value),'primary']]); return; }
   if(d.copy==='checkin'){ const rs=S.tracker.filter(r=>isOpen(r)&&(has(trackerFlags(r),'overdue')||has(trackerFlags(r),'soon'))).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1);
     copy('10:00 check-in, '+fmt(TODAY)+'\n\n'+rs.map(r=>'• #'+r.id+' '+r.item+' | '+r.owner+' | '+(trackerFlags(r).find(x=>x.code==='overdue'||x.code==='soon')||{}).text+' | Next: '+(r.next||'?')).join('\n')); return; }
+  if(d.weekly){ openWeekly(); return; }
   if(d.person){ S.ui.person=d.person; save(); render(); return; }
   if(d.planwho!==undefined){ S.ui.planWho=d.planwho; save(); render(); return; }
   if(d.notedone!==undefined){ const n=S.notes.find(n=>n.who===S.ui.person && n.text===d.notedone && !n.done); if(n){ n.done=true; save(); render(); } return; }
@@ -900,17 +1037,17 @@ document.addEventListener('click',async e=>{
   if(t.id==='newItem'){ openEdit('tracker',null); return; }
   if(t.id==='exportX'){ try{ const {out,notes}=await buildExport(); const base=(S.file.name||'tracker.xlsx').replace(/\.xlsx$/i,'').replace(/_updated.*$/,'');
       const yymmdd=TODAY.slice(2).replace(/-/g,''); const name=(/^\d{6}_/.test(base)?yymmdd+base.slice(6):base+'_'+yymmdd)+'.xlsx';
-      download(name,out,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      if(!(await saveFile(name,out,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))) return;
       S.file.b64=bufToB64(out); S.file.exportedAt=Date.now(); S.file.name=name;
       for(const k of KINDS) for(const r of S[k]) r._base=baseOf(k,r);
       save(); render(); toast('Downloaded '+name+(notes.length?' · '+notes[0]:''));
-    }catch(err){ alert(err.message); } return; }
+    }catch(err){ say(err.message); } return; }
   if(t.id==='copyChanges'){ const f=S.file; const ch=S.history.filter(x=>x.src==='tool' && (!f || x.t>(f.exportedAt||f.importedAt)) && x.f!=='updated');
     if(!ch.length){ toast('No changes since the last load or download.'); return; }
     copy('Hi '+S.settings.keeper+', please update the tracker with these changes:\n\n'+ch.map(x=>'• '+SCHEMA[x.kind].label+' #'+x.id+' '+x.title+': '+(x.f==='(new)'?'NEW: please add this row':SCHEMA[x.kind].fields[x.f]+' → '+(shown(x.kind,x.f,x.to)||'(blank)'))).join('\n')+'\n\nThanks!'); return; }
-  if(t.id==='backup'){ download('control-tower-backup-'+TODAY+'.json',JSON.stringify(S),'application/json'); return; }
+  if(t.id==='backup'){ saveFile('control-tower-backup-'+TODAY+'.json',JSON.stringify(S),'application/json'); return; }
   if(t.id==='restore'){ $('#fileIn').click(); return; }
-  if(t.id==='reset'){ if(confirm('Remove all tracker data, notes and history from this browser? Your Excel file is not affected.')){ S=blank(); save(); render(); } return; }
+  if(t.id==='reset'){ confirmDlg('Remove all tracker data, notes and history from this tool? Your Excel file is not affected.','Clear everything',()=>{ S=blank(); save(true); render(); },true); return; }
 });
 document.addEventListener('change',e=>{
   const t=e.target, d=t.dataset;
@@ -928,7 +1065,7 @@ document.addEventListener('input',e=>{ if(e.target.dataset.tf==='q'){ clearTimeo
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && e.target.id==='noteIn') $('#noteAdd').click(); });
 async function handleFile(file){
   if(/\.json$/i.test(file.name)){ try{ const s=JSON.parse(await file.text()); if(s.v!==1 || !Array.isArray(s.tracker)) throw new Error('not a Control Tower backup');
-      if(confirm('Replace everything in this browser with the backup from '+file.name+'?')){ S={...blank(),...s}; save(); render(); toast('Backup restored'); } }catch(e){ alert('Could not restore: '+e.message); } return; }
+      confirmDlg('Replace everything in this tool with the backup from '+file.name+'?','Restore backup',()=>{ S={...blank(),...s}; save(true); render(); toast('Backup restored'); }); }catch(e){ say('Could not restore: '+e.message); } return; }
   await importBuffer(await file.arrayBuffer(), file.name);
 }
 function bindDrop(){
@@ -940,6 +1077,7 @@ window.addEventListener('dragover',e=>e.preventDefault());
 window.addEventListener('drop',e=>{ if(e.target.closest && e.target.closest('#drop')) return; e.preventDefault(); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
 
 render();
+initCloud();
 </script>
 </body>
 </html>

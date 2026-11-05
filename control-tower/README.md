@@ -8,6 +8,10 @@ A one-file companion to the project's Excel tracker. It reads the tracker and te
 
 ## Get it running
 
+**Easiest:** open the private Claude page link Claude gave you, then tap the link and drop your tracker on it. Inside a Claude page, your data is saved privately to your own Claude account, so it is there on your phone and laptop. Each Excel download asks you to confirm.
+
+**Offline, as a file:**
+
 1. On GitHub, open `control-tower/index.html` and click **Download raw file**.
 2. Double-click the downloaded file. It opens in Edge, Chrome or Safari.
 3. Drop your tracker `.xlsx` onto the page.
@@ -18,10 +22,11 @@ Keep the file somewhere permanent, such as Documents. Your browser remembers you
 
 | Tab | What it's for |
 |---|---|
-| **Today** | Your list for today: today's plan and meetings, items where *you* act next that are overdue or due soon, and plan tasks not yet ticked. Also **Chase the Bank** (one drafted reminder email per Bank counterpart), the **10:00 check-in** agenda, the next 7 days and recent changes. |
+| **Today** | Your list for today: today's plan and meetings, items where *you* act next that are overdue or due soon, and plan tasks not yet ticked. Also a **Weekly summary** button (ready to paste for the senior partners), **Chase the Bank** (one drafted reminder email per Bank counterpart), the **10:00 check-in** agenda, the next 7 days and recent changes. |
 | **Team prompts** | A ready-to-send message for Delali (or Salia): today's plan tasks, earlier tasks to confirm, their overdue items, tracker fixes (no named person, still "To confirm", no date, not updated), write-ups due, and your own notes. Edit it, then copy it into Teams, WhatsApp or email. |
 | **Tracker** | Every item, with filters (type, Action Plan part, owner, flag). Click a row to edit it. Quick buttons: Done, Chased today, +2 working days, +1 week, and "Ask Delali about this". |
 | **Interviews & sessions** | Progress counts against the targets, plus flags for missing briefs, overdue write-ups and countries not yet nominated. |
+| **Feedback log** | Every comment on the Position Paper and Action Plan, with its source, section and how it was handled. Open comments turn amber two days before a review point and red once it has passed. |
 | **Plan & health** | Milestones, a red/amber/green view of the nine Action Plan results, the Management decisions, and the day-by-day plan with tick boxes. |
 | **Data** | Load the latest Excel, download the updated Excel, copy your changes as a message, settings, backup, and the list of rules the checks use. |
 
@@ -40,7 +45,8 @@ The tool finds each tab by name and each column by its heading in row 1, so the 
 - **Tracker:** ID, Item, Type, Action Plan part, Owner, Next step, Due date, Status, Days overdue, Last updated, Notes and links
 - **Interviews:** #, Interviewee, Organisation, Pathway, Route and owner, Stage, Interview date, Brief done, Write-up done, Next step, Notes
 - **Sessions:** #, Session, Type, Hub or department, Country, Convened by, Status, Date, Write-up done, Notes
-- **Plan** (optional): ID, Date, Week, Who, Task, Done, Notes. Who can be a person, `Meeting` or `Milestone`.
+- **Plan** (optional): ID, Date, Week, Who, Task, Done, Notes. Who can be a person, `Meeting` or `Milestone`. A milestone whose task says "review point" sets the feedback log deadlines.
+- **Feedback log** (optional): ID, Date, Source, Comment, Document, Section, Status, How handled, Decided by, Notes
 - **Lists** (optional): supplies the dropdown values.
 
 ## How the checks work
@@ -58,4 +64,4 @@ The tool uses only these rules. You can also read them on the Data tab.
 
 ## For developers
 
-Edit `src/app.html`, then run `python3 build.py`. This inlines `vendor/jszip.min.js` (MIT licence) and writes `index.html`. To test the tool as if it were another date, add `?today=YYYY-MM-DD` to the URL.
+Edit `src/app.html`, then run `python3 build.py`. This inlines `vendor/jszip.min.js` (MIT licence) and writes `index.html` (the double-click file) and `artifact.html` (the same tool as a Claude page). To test the tool as if it were another date, add `?today=YYYY-MM-DD` to the URL.
