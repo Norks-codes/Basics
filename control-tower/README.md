@@ -20,6 +20,14 @@ Keep the file somewhere permanent, such as Documents. Your browser remembers you
 
 ## The tabs
 
+**Day book** (opens first) is your own to-do list, and it works even without the tracker loaded:
+- Anything you don't tick carries to the next day and shows how long it has been carried (3rd day turns amber, 5th day turns red).
+- Each morning, "Before you start" lists what was left undone, including unticked tasks from your plan. Each needs a decision: Done, Today, Later (pick a day), hand to Delali (adds it to her message and to Waiting for), or Drop (with a reason).
+- **Waiting for** lists what you've asked others for. Each item comes back on its chase date with a drafted reminder.
+- **By area** shows every moving part. An area turns amber after 5 working days with no activity.
+- **End of day** takes a one-line note, which feeds the weekly summary. **Past pages** shows what you finished, handed on or dropped.
+
+
 | Tab | What it's for |
 |---|---|
 | **Today** | Your list for today: today's plan and meetings, items where *you* act next that are overdue or due soon, and plan tasks not yet ticked. Also a **Weekly summary** button (ready to paste for the senior partners), **Chase the Bank** (one drafted reminder email per Bank counterpart), the **10:00 check-in** agenda, the next 7 days and recent changes. |

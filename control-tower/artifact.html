@@ -120,6 +120,13 @@
   #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;max-width:90vw}
   #toast.show{opacity:1}
   .rules li{margin:5px 0}
+  .cap{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .cap input,.cap select{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+  .cap input:not([type=date]){flex:1 1 220px;min-width:0}
+  .card.review{border-color:var(--amber);box-shadow:0 0 0 2px var(--amberbg) inset,var(--shadow)}
+  button.tag.areatag{border:0;cursor:pointer;font:inherit;font-size:11.5px}
+  li.donerow .t{color:var(--muted)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .ask{width:100%;min-height:90px;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
   .save-state{font-size:12px;opacity:.85}
   .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:var(--chip);padding:1px 5px;border-radius:5px}
@@ -197,11 +204,12 @@ const LIST_HEADERS = { owners:'Owners', types:'Types', status:'Status', parts:'P
 
 function blank(){
   return { v:1, tracker:[], interviews:[], sessions:[], plan:[], feedback:[], lists:structuredClone(DEFAULT_LISTS),
-    notes:[], history:[], file:null,
+    notes:[], history:[], file:null, todos:[], waiting:[], dayNotes:{},
     settings:{ me:'Miriam', keeper:'Delali', team:['Delali','Salia'], soonDays:2, staleDays:3, interviewTarget:10, rmcTarget:16 },
-    ui:{ tab:'today', person:'Delali', tf:{ q:'', status:'open', type:'', part:'', owner:'', flag:'' }, planWho:'', planShowDone:false } };
+    ui:{ tab:'day', dayArea:'', person:'Delali', tf:{ q:'', status:'open', type:'', part:'', owner:'', flag:'' }, planWho:'', planShowDone:false } };
 }
 let S = load();
+if(!S.ui.seenDay){ S.ui.seenDay=true; S.ui.tab='day'; }
 function load(){
   try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.v===1){ const b=blank(); return {...b, ...s, lists:{...b.lists,...s.lists}, settings:{...b.settings,...s.settings}, ui:{...b.ui,...s.ui, tf:{...b.ui.tf,...(s.ui||{}).tf}}}; } }catch(e){}
   return blank();
@@ -632,14 +640,14 @@ function has(fl,code){ return fl.some(x=>x.code===code); }
 /* ==========================================================================
    Rendering
    ========================================================================== */
-const TABS=[['today','Today'],['team','Team prompts'],['tracker','Tracker'],['meetings','Interviews & sessions'],['feedback','Feedback log'],['plan','Plan & health'],['data','Data']];
+const TABS=[['day','Day book'],['today','Project today'],['team','Team prompts'],['tracker','Tracker'],['meetings','Interviews & sessions'],['feedback','Feedback log'],['plan','Plan & health'],['data','Data']];
 function render(){
   const red=S.tracker.filter(r=>has(trackerFlags(r),'overdue')).length;
-  $('#tabs').innerHTML=TABS.map(([k,l])=>'<button data-tab="'+k+'" class="'+(S.ui.tab===k?'on':'')+'">'+l+(k==='tracker'&&red?'<span class="count">'+red+'</span>':'')+'</button>').join('');
+  $('#tabs').innerHTML=TABS.map(([k,l])=>'<button data-tab="'+k+'" class="'+(S.ui.tab===k?'on':'')+'">'+l+(k==='tracker'&&red?'<span class="count">'+red+'</span>':'')+(k==='day'&&reviewItems().length?'<span class="count">'+reviewItems().length+'</span>':'')+'</button>').join('');
   $('#hdrSub').textContent = S.file ? fmt(TODAY)+' · '+S.file.name+' · loaded '+new Date(S.file.importedAt).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : 'Your tracker, checked every morning.';
   const v=$('#view');
-  if(!S.tracker.length && S.ui.tab!=='data'){ v.innerHTML=welcome(); bindDrop(); return; }
-  v.innerHTML=({today:viewToday,team:viewTeam,tracker:viewTracker,meetings:viewMeetings,feedback:viewFeedback,plan:viewPlan,data:viewData}[S.ui.tab]||viewToday)();
+  if(!S.tracker.length && S.ui.tab!=='data' && S.ui.tab!=='day'){ v.innerHTML=welcome(); bindDrop(); return; }
+  v.innerHTML=({day:viewDay,today:viewToday,team:viewTeam,tracker:viewTracker,meetings:viewMeetings,feedback:viewFeedback,plan:viewPlan,data:viewData}[S.ui.tab]||viewToday)();
   bindDrop();
 }
 function welcome(){
@@ -647,6 +655,131 @@ function welcome(){
    +dropZone()+'<p class="small muted" style="margin-top:12px">The tool reads the <b>Tracker</b>, <b>Interviews</b>, <b>Sessions</b> and <b>Plan</b> tabs by their column headings. You can edit here and download the same workbook back with your changes written in, keeping its colours, dropdowns and Summary tab.</p></div>';
 }
 function dropZone(){ return '<div class="drop" id="drop"><strong>Drop the tracker .xlsx here</strong>or click to choose the file · a .json backup also works</div>'; }
+
+/* ==========================================================================
+   DAY BOOK: your own to-do list. Unfinished items never stay behind on an
+   old page: they carry forward, show how long they have been carried, and
+   each morning ask for a decision.
+   ========================================================================== */
+const AREAS=['Abidjan','Bank data','Position Paper','Action Plan','Consultations','Team','Other'];
+const AREA_WORDS=[
+  ['Bank data',/pipeline|coefficient|jfya|ecmr|turin|\bjim\b|annual report|sergio|tapera|bank data|approvals|snd?r|snsp|kpi/i],
+  ['Abidjan',/abidjan|travel|hotel|flight|prep pack|logistic|pre-?read|agenda|sofitel|driver/i],
+  ['Position Paper',/position paper|\bpaper\b|big win|deck|consistency|attribution|exhibit/i],
+  ['Action Plan',/action plan|template|results framework|theory of change|annex|salia|pipeline mapping|\bv[123]\b/i],
+  ['Consultations',/interview|session|\brmc\b|\bhub|country|ghana|pam\b|ministry|minister|write-?up|synthesis|ceo|firm/i],
+  ['Team',/delali|salia|team|check-?in|induct|liz|michael|partner/i]];
+function guessArea(t){ for(const [a,re] of AREA_WORDS) if(re.test(t)) return a; return 'Other'; }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function ord(n){ const s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+const openTodo = t => !t.done && !t.dropped && !t.handed;
+function carriedDays(t){ return t.first && t.first<TODAY ? workdaysBetween(t.first,TODAY) : 0; }
+function carryTag(t){ const c=carriedDays(t); if(!c) return ''; return '<span class="tag '+(c>=4?'red':c>=2?'amber':'info')+'">'+ord(c+1)+' day</span>'; }
+function addTodo(text,area,day,extra){ const t={ id:uid(), text, area:area||guessArea(text), day:day||TODAY, first:day&&day>TODAY?day:TODAY, created:TODAY, ...extra }; S.todos.push(t); return t; }
+function findTodo(id){ return S.todos.find(t=>t.id===id); }
+function myPlanRows(){ const me=S.settings.me; return S.plan.filter(r=>r.who===me && !r._moved); }
+/* Items from an earlier day that still need a decision this morning */
+function reviewItems(){
+  const out=[];
+  for(const t of S.todos) if(openTodo(t) && t.day<TODAY && t.reviewed!==TODAY) out.push({kind:'todo',t});
+  for(const r of myPlanRows()) if(!yes(r.done) && r.date && r.date<TODAY) out.push({kind:'plan',r});
+  return out;
+}
+function planToTodo(r){ r._moved=true; return addTodo(r.task,guessArea(r.task),TODAY,{first:r.date,fromPlan:true}); }
+function resolveItem(key,action,arg){
+  let t;
+  if(key.startsWith('plan:')){ const r=find('plan',key.slice(5)); if(!r) return;
+    if(action==='done'){ setField('plan',r,'done','Yes'); save(); render(); return; }
+    t=planToTodo(r);
+  } else t=findTodo(key);
+  if(!t) return;
+  if(action==='done'){ t.done=true; t.doneOn=TODAY; }
+  else if(action==='today'){ t.day=TODAY; t.reviewed=TODAY; }
+  else if(action==='move'){ t.day=arg; t.reviewed=TODAY; }
+  else if(action==='delali'){ const k=S.settings.keeper; t.handed=k; t.doneOn=TODAY;
+    S.notes.push({who:k,text:t.text,created:Date.now()});
+    S.waiting.push({id:uid(),what:t.text,who:k,area:t.area,asked:TODAY,chaseOn:addWorkdays(TODAY,1)}); }
+  else if(action==='drop'){ t.dropped=true; t.dropReason=arg||''; t.doneOn=TODAY; }
+  save(); render();
+}
+function moveDlg(key,label){
+  const d=dow(TODAY), nextMon=addDays(TODAY,((8-d)%7)||7);
+  openDlg('Move to another day','<p>'+esc(label)+'</p><div class="row" style="margin:10px 0"><button class="b" data-moveto="'+addWorkdays(TODAY,1)+'">Tomorrow ('+fmt(addWorkdays(TODAY,1))+')</button><button class="b" data-moveto="'+nextMon+'">Next Monday ('+fmt(nextMon)+')</button></div><label class="small muted" for="moveDate">Or pick a date</label><div class="row"><input type="date" id="moveDate" value="'+addWorkdays(TODAY,2)+'" style="font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)"></div>',
+    [['Cancel',closeDlg],['Move',()=>{ const v=$('#moveDate').value; if(v){ closeDlg(); resolveItem(key,'move',v); toast('Moved to '+fmt(v)); } },'primary']]);
+  moveDlg.key=key;
+}
+function dropDlg(key,label){ askDlg('Drop this to-do?','"'+label+'" will be crossed off. Why? (kept so you can look back)','',v=>{ resolveItem(key,'drop',v); toast('Dropped'); }); }
+function todoActs(key,label){ return '<div class="acts"><button class="b" data-tdo="done" data-key="'+esc(key)+'">Done</button><button class="b" data-tdo="move" data-key="'+esc(key)+'" data-label="'+esc(label)+'">Later</button><button class="b" data-tdo="delali" data-key="'+esc(key)+'">'+esc(S.settings.keeper)+'</button><button class="b ghost" data-tdo="drop" data-key="'+esc(key)+'" data-label="'+esc(label)+'">Drop</button></div>'; }
+function areaSel(id,val,auto){ return '<select id="'+id+'" aria-label="Area">'+(auto?'<option value="">Area: auto</option>':'')+AREAS.map(a=>'<option '+(a===val?'selected':'')+'>'+a+'</option>').join('')+'</select>'; }
+
+function viewDay(){
+  const me=S.settings.me, review=reviewItems();
+  const todays=S.todos.filter(t=>openTodo(t) && t.day<=TODAY && !(t.day<TODAY && t.reviewed!==TODAY));
+  const doneToday=S.todos.filter(t=>t.doneOn===TODAY && (t.done||t.handed||t.dropped));
+  const planToday=myPlanRows().filter(r=>r.date===TODAY);
+  const fixed=[...S.plan.filter(r=>r.date===TODAY && (r.who==='Meeting'||r.who==='Milestone')).map(r=>({t:r.task,k:r.who,n:r.notes})),
+    ...S.sessions.filter(r=>r.date===TODAY).map(r=>({t:r.session,k:'Session',n:r.notes})),
+    ...S.interviews.filter(r=>r.date===TODAY).map(r=>({t:'Interview: '+r.name+' ('+r.org+')',k:'Interview',n:''}))];
+  const chase=S.waiting.filter(w=>!w.done && w.chaseOn<=TODAY);
+  const waitingAll=S.waiting.filter(w=>!w.done).sort((a,b)=>a.chaseOn<b.chaseOn?-1:1);
+  const ms=milestones(), next=ms.find(m=>m.date>=TODAY && !yes(m.done));
+  const wk=S.plan.find(r=>r.date===TODAY)?.week;
+  const upcoming=S.todos.filter(t=>openTodo(t) && t.day>TODAY).sort((a,b)=>a.day<b.day?-1:1);
+
+  let h='<div class="card"><div class="hero"><div class="big">'+fmt(TODAY)+'</div>'+(wk?'<div class="muted">'+esc(wk)+'</div>':'')
+    +(next?'<div>Next milestone <b>'+esc(fmt(next.date))+'</b> ('+rel(next.date)+'): '+esc(next.task)+'</div>':'')
+    +'<span class="spacer"></span><button class="b '+(dow(TODAY)===5?'primary':'')+'" data-weekly="1">Weekly summary</button></div>'
+    +'<div class="small muted" style="margin-top:6px">'+(todays.length+planToday.filter(r=>!yes(r.done)).length)+' to do today · '+chase.length+' to chase · '+waitingAll.length+' waiting on others'+(upcoming.length?' · '+upcoming.length+' moved to later days':'')+'</div></div>';
+
+  if(review.length){
+    h+='<div class="card review"><div class="row"><h2 class="spacer">Before you start: '+review.length+' left from earlier</h2><button class="b" id="keepAll">Keep all for today</button></div>'
+      +'<p class="why">These were not ticked off. Decide each one so nothing is lost when the page turns.</p><ul class="list">'
+      +review.map(x=>{ if(x.kind==='todo'){ const t=x.t; return '<li><span class="dot '+(carriedDays(t)>=4?'red':'amber')+'"></span><div class="body"><div class="t">'+esc(t.text)+'</div><div class="m"><span class="tag">'+esc(t.area)+'</span>'+carryTag(t)+' from '+esc(fmt(t.day))+'</div></div>'+todoActs(t.id,t.text).replace('<button class="b" data-tdo="move"','<button class="b" data-tdo="today" data-key="'+esc(t.id)+'">Today</button><button class="b" data-tdo="move"')+'</li>'; }
+        const r=x.r, key='plan:'+keyOf(r); return '<li><span class="dot amber"></span><div class="body"><div class="t">'+esc(r.task)+'</div><div class="m"><span class="tag">From the plan</span> '+esc(fmt(r.date))+'</div></div>'+todoActs(key,r.task).replace('<button class="b" data-tdo="move"','<button class="b" data-tdo="today" data-key="'+esc(key)+'">Today</button><button class="b" data-tdo="move"')+'</li>'; }).join('')+'</ul></div>';
+  }
+
+  h+='<div class="card"><h2>Add a to-do</h2><div class="cap"><input id="capText" placeholder="e.g. Send Sergio the pre-read questions" autocomplete="off">'+areaSel('capArea','',true)
+    +'<select id="capDay" aria-label="Day"><option value="'+TODAY+'">Today</option><option value="'+addWorkdays(TODAY,1)+'">'+esc(fmt(addWorkdays(TODAY,1)))+'</option><option value="'+addWorkdays(TODAY,2)+'">'+esc(fmt(addWorkdays(TODAY,2)))+'</option><option value="'+addDays(TODAY,((8-dow(TODAY))%7)||7)+'">Next Monday</option></select>'
+    +'<button class="b primary" id="capAdd">Add</button></div><p class="small muted" style="margin:6px 0 0">Press Enter to add. The area is guessed from the words. Change it if it is wrong.</p></div>';
+
+  // Today's page
+  let li='';
+  for(const f of fixed) li+='<li><span class="dot blue"></span><div class="body"><div class="t">'+esc(f.t)+'</div><div class="m">'+esc(f.k)+(f.n?' · '+esc(f.n):'')+'</div></div></li>';
+  for(const r of planToday) li+='<li><input type="checkbox" data-tick="'+esc(keyOf(r))+'" '+(yes(r.done)?'checked':'')+' aria-label="Done"><div class="body"><div class="t">'+esc(r.task)+'</div><div class="m"><span class="tag">From the plan</span></div></div></li>';
+  for(const t of todays.sort((a,b)=>carriedDays(b)-carriedDays(a))) li+='<li><input type="checkbox" data-todo="'+esc(t.id)+'" aria-label="Done"><div class="body"><div class="t">'+esc(t.text)+'</div><div class="m"><button class="tag areatag" data-area="'+esc(t.id)+'" title="Change area">'+esc(t.area)+'</button>'+carryTag(t)+(t.fromPlan?'<span class="tag">From the plan</span>':'')+'</div></div>'+todoActs(t.id,t.text).replace('<button class="b" data-tdo="done" data-key="'+esc(t.id)+'">Done</button>','')+'</li>';
+  for(const t of doneToday) li+='<li class="donerow"><input type="checkbox" data-todo="'+esc(t.id)+'" checked aria-label="Undo"><div class="body"><div class="t"><s>'+esc(t.text)+'</s></div><div class="m">'+(t.handed?'Handed to '+esc(t.handed):t.dropped?'Dropped'+(t.dropReason?': '+esc(t.dropReason):''):'Done')+'</div></div></li>';
+  h+='<div class="grid two"><div class="card"><h2>Today\'s page</h2><p class="why">Fixed points, your plan for today and your to-dos. Anything you do not tick moves to tomorrow by itself.</p>'
+    +(li?'<ul class="list">'+li+'</ul>':'<div class="empty">Nothing yet. Add your first to-do above.</div>')+'</div>';
+
+  // Waiting for
+  let wl='';
+  for(const w of waitingAll){ const due=w.chaseOn<=TODAY;
+    wl+='<li><span class="dot '+(due?'amber':'')+'"></span><div class="body"><div class="t">'+esc(w.who)+': '+esc(w.what)+'</div><div class="m">Asked '+esc(fmt(w.asked,false))+' · '+(due?'<b>chase '+(w.chaseOn<TODAY?'(was due '+esc(fmt(w.chaseOn,false))+')':'today')+'</b>':'chase '+esc(fmt(w.chaseOn)))+(w.chased?' · chased '+w.chased+'×':'')+'</div></div>'
+      +'<div class="acts">'+(due?'<button class="b" data-wchase="'+esc(w.id)+'">Chased</button><button class="b ghost" data-wmsg="'+esc(w.id)+'">Reminder</button>':'')+'<button class="b" data-wgot="'+esc(w.id)+'">Received</button></div></li>'; }
+  h+='<div class="card"><h2>Waiting for</h2><p class="why">What you have asked other people for. Each comes back on its chase date.</p>'
+    +(wl?'<ul class="list">'+wl+'</ul>':'<div class="empty">Nothing yet.</div>')
+    +'<h3>Add something you are waiting for</h3><div class="cap"><input id="wWho" placeholder="Who (e.g. Sergio)" style="flex:0 1 150px"><input id="wWhat" placeholder="What (e.g. jobs-per-dollar coefficients)"><label class="small muted" for="wChase" style="display:flex;align-items:center;gap:6px">chase<input type="date" id="wChase" value="'+addWorkdays(TODAY,2)+'"></label><button class="b primary" id="wAdd">Add</button></div></div></div>';
+
+  // Areas
+  const areaRows=AREAS.map(a=>{ const open=S.todos.filter(t=>openTodo(t)&&t.area===a), wait=S.waiting.filter(w=>!w.done&&w.area===a);
+    const acts=[...S.todos.filter(t=>t.area===a).map(t=>t.doneOn||t.created),...S.waiting.filter(w=>w.area===a).map(w=>w.asked)].filter(Boolean).sort();
+    const lastAct=acts[acts.length-1]; const quiet=lastAct?workdaysBetween(lastAct,TODAY):null;
+    return {a,open,wait,lastAct,quiet}; }).filter(x=>x.open.length||x.wait.length||x.lastAct);
+  h+='<div class="card"><h2>By area</h2><p class="why">Every moving part in one place. An area turns amber when you have not touched it for 5 working days.</p>'
+    +(areaRows.length?'<div class="health">'+areaRows.map(x=>'<div class="h '+(x.quiet!=null&&x.quiet>=5?'amber':x.open.some(t=>carriedDays(t)>=4)?'red':'green')+'" data-areaview="'+esc(x.a)+'"><div class="n">'+esc(x.a)+'</div><div class="m">'+x.open.length+' to do · '+x.wait.length+' waiting</div><div class="m">'+(x.lastAct?'Last activity '+esc(fmt(x.lastAct,false))+(x.quiet>=5?' ('+x.quiet+' working days ago)':''):'')+'</div></div>').join('')+'</div>':'<div class="empty">Areas fill in as you add to-dos.</div>');
+  if(S.ui.dayArea){ const a=S.ui.dayArea; const list=[...S.todos.filter(t=>openTodo(t)&&t.area===a).map(t=>'<li><span class="dot"></span><div class="body"><div class="t">'+esc(t.text)+'</div><div class="m">'+(t.day>TODAY?'On '+esc(fmt(t.day)):'Today')+' '+carryTag(t)+'</div></div></li>'),
+      ...S.waiting.filter(w=>!w.done&&w.area===a).map(w=>'<li><span class="dot blue"></span><div class="body"><div class="t">Waiting: '+esc(w.who)+', '+esc(w.what)+'</div><div class="m">chase '+esc(fmt(w.chaseOn))+'</div></div></li>')];
+    h+='<h3>'+esc(a)+' <button class="b ghost" data-areaview="">close</button></h3>'+(list.length?'<ul class="list">'+list.join('')+'</ul>':'<div class="empty">Nothing open.</div>'); }
+  if(upcoming.length) h+='<h3>Moved to later days</h3><ul class="list">'+upcoming.slice(0,15).map(t=>'<li><span class="dot"></span><div class="body"><div class="t">'+esc(t.text)+'</div><div class="m">'+esc(fmt(t.day))+' · '+esc(t.area)+'</div></div><div class="acts"><button class="b ghost" data-tdo="today" data-key="'+esc(t.id)+'">Bring to today</button></div></li>').join('')+'</ul>';
+  h+='</div>';
+
+  // End of day + past pages
+  const past=[]; for(let i=1;i<=10;i++){ const d=addDays(TODAY,-i); const done=S.todos.filter(t=>t.doneOn===d); const note=S.dayNotes[d]; if(done.length||note) past.push({d,done,note}); }
+  h+='<div class="grid two"><div class="card"><h2>End of day</h2><p class="why">One line on how today went. It goes into the Friday weekly summary.</p><textarea class="ask" id="dayNote" placeholder="e.g. Abidjan agenda agreed; pipeline still with the Bank">'+esc(S.dayNotes[TODAY]||'')+'</textarea></div>'
+    +'<div class="card"><h2>Past pages</h2><p class="why">What you finished, handed on or dropped on recent days.</p>'+(past.length?past.map(p=>'<h3>'+esc(fmt(p.d))+'</h3>'+(p.note?'<p class="small" style="margin:0 0 4px"><i>'+esc(p.note)+'</i></p>':'')+'<ul class="list">'+p.done.map(t=>'<li><span class="dot '+(t.done?'green':'')+'"></span><div class="body"><div class="m">'+(t.done?'Done':t.handed?'Handed to '+esc(t.handed):'Dropped')+': '+esc(t.text)+(t.dropReason?' ('+esc(t.dropReason)+')':'')+'</div></div></li>').join('')+'</ul>').join(''):'<div class="empty">Your past pages will appear here.</div>')+'</div></div>';
+  return h;
+}
+function waitingMsg(w){ return 'Hi '+w.who+',\n\nJust following up on '+w.what+'. Could you let me know when I might expect it?\n\nMany thanks,\n'+S.settings.me; }
 
 /* ---------- TODAY ---------- */
 function milestones(){ return S.plan.filter(r=>r.who==='Milestone' && r.date).sort((a,b)=>a.date<b.date?-1:1); }
@@ -877,7 +1010,9 @@ function weeklySummary(){
     +(dec.length?'\nManagement decisions\n'+L(dec,r=>r.item+': '+r.status+(r.due?' (sought by '+fmt(r.due,false)+')':''))+'\n':'')
     +'\nConsultations\n• Interviews held: '+heldI+' of '+S.settings.interviewTarget+' targeted\n• RMC sessions listed: '+rmc.length+' of about '+S.settings.rmcTarget+'; countries nominated: '+nom+'\n'
     +'\nFeedback log\n• '+fbO+' open, '+fbR+' reflected or explained'+(reviewPoints().find(x=>x>=TODAY)?'; next review point '+fmt(reviewPoints().find(x=>x>=TODAY)):'')+'\n'
-    +'\nNext week\n'+L(nextUp,x=>fmt(x.d)+': '+x.t,14)+'\n';
+    +(Object.keys(S.dayNotes).some(k=>inW(k)&&S.dayNotes[k])?'\nMy notes this week\n'+L(Object.keys(S.dayNotes).filter(k=>inW(k)&&S.dayNotes[k]).sort(),k=>fmt(k)+': '+S.dayNotes[k],7)+'\n':'')
+    +'\nNext week\n'+L(nextUp,x=>fmt(x.d)+': '+x.t,14)+'\n'
+    +'\nStill waiting on others ('+S.waiting.filter(w=>!w.done).length+')\n'+L(S.waiting.filter(w=>!w.done),w=>w.who+': '+w.what+' (asked '+fmt(w.asked,false)+')',8)+'\n';
 }
 function openWeekly(){ openDlg('Weekly summary','<p class="why">Built from the tracker, plan, sessions and feedback log. Edit it, then copy it into an email or Teams.</p><textarea class="msg" id="weeklyTxt" style="min-height:360px">'+esc(weeklySummary())+'</textarea>',[['Close',closeDlg],['Copy',()=>copy($('#weeklyTxt').value),'primary']]); }
 
@@ -1021,7 +1156,7 @@ function emailFor(who){
    Events
    ========================================================================== */
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('button,[data-edit],[data-part],.tile,#drop'); if(!t) return;
+  const t=e.target.closest('button,[data-edit],[data-part],[data-areaview],.tile,#drop'); if(!t) return;
   const d=t.dataset;
   if(t.closest('dialog') && d.close!==undefined){ closeDlg(); return; }
   if(d.tab){ S.ui.tab=d.tab; save(); render(); scrollTo(0,0); return; }
@@ -1036,6 +1171,20 @@ document.addEventListener('click',async e=>{
   if(d.copy==='checkin'){ const rs=S.tracker.filter(r=>isOpen(r)&&(has(trackerFlags(r),'overdue')||has(trackerFlags(r),'soon'))).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1);
     copy('10:00 check-in, '+fmt(TODAY)+'\n\n'+rs.map(r=>'• #'+r.id+' '+r.item+' | '+r.owner+' | '+(trackerFlags(r).find(x=>x.code==='overdue'||x.code==='soon')||{}).text+' | Next: '+(r.next||'?')).join('\n')); return; }
   if(d.weekly){ openWeekly(); return; }
+  if(d.tdo){ const k=d.key;
+    if(d.tdo==='move') moveDlg(k,d.label); else if(d.tdo==='drop') dropDlg(k,d.label);
+    else { resolveItem(k,d.tdo); if(d.tdo==='delali') toast('Added to '+S.settings.keeper+'\'s message and to Waiting for'); }
+    return; }
+  if(d.moveto){ closeDlg(); resolveItem(moveDlg.key,'move',d.moveto); toast('Moved to '+fmt(d.moveto)); return; }
+  if(t.id==='keepAll'){ for(const x of reviewItems()){ if(x.kind==='todo'){ x.t.reviewed=TODAY; } else { planToTodo(x.r).reviewed=TODAY; } } save(); render(); return; }
+  if(t.id==='capAdd'){ const v=$('#capText').value.trim(); if(!v){ $('#capText').focus(); return; } const t2=addTodo(v,$('#capArea').value,$('#capDay').value); save(); render(); toast((t2.day>TODAY?'Added for '+fmt(t2.day):'Added')+' · '+t2.area); const c=$('#capText'); if(c) c.focus(); return; }
+  if(d.area){ const td=findTodo(d.area); if(td){ td.area=AREAS[(AREAS.indexOf(td.area)+1)%AREAS.length]; save(); render(); } return; }
+  if(d.areaview!==undefined){ S.ui.dayArea=d.areaview; save(); render(); return; }
+  if(t.id==='wAdd'){ const who=$('#wWho').value.trim(), what=$('#wWhat').value.trim(); if(!who||!what){ toast('Fill in who and what.'); return; }
+    S.waiting.push({id:uid(),who,what,area:guessArea(who+' '+what),asked:TODAY,chaseOn:$('#wChase').value||addWorkdays(TODAY,2)}); save(); render(); toast('Added to Waiting for'); return; }
+  if(d.wchase){ const w=S.waiting.find(x=>x.id===d.wchase); if(w){ w.chased=(w.chased||0)+1; w.lastChased=TODAY; w.chaseOn=addWorkdays(TODAY,2); save(); render(); toast('Next chase '+fmt(w.chaseOn)); } return; }
+  if(d.wgot){ const w=S.waiting.find(x=>x.id===d.wgot); if(w){ w.done=true; w.doneOn=TODAY; save(); render(); toast('Marked as received'); } return; }
+  if(d.wmsg){ const w=S.waiting.find(x=>x.id===d.wmsg); if(w) openDlg('Reminder to '+w.who,'<p class="why">A draft only. Copy it into Outlook, Teams or WhatsApp.</p><textarea class="msg" id="wTxt" style="min-height:160px">'+esc(waitingMsg(w))+'</textarea>',[['Close',closeDlg],['Copy',()=>copy($('#wTxt').value),'primary']]); return; }
   if(d.person){ S.ui.person=d.person; save(); render(); return; }
   if(d.planwho!==undefined){ S.ui.planWho=d.planwho; save(); render(); return; }
   if(d.notedone!==undefined){ const n=S.notes.find(n=>n.who===S.ui.person && n.text===d.notedone && !n.done); if(n){ n.done=true; save(); render(); } return; }
@@ -1060,6 +1209,8 @@ document.addEventListener('click',async e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target, d=t.dataset;
+  if(d.todo){ const td=findTodo(d.todo); if(td){ if(t.checked){ td.done=true; td.doneOn=TODAY; } else { td.done=false; td.handed=undefined; td.dropped=false; td.doneOn=undefined; td.day=TODAY; td.reviewed=TODAY; } save(); setTimeout(render,150); } return; }
+  if(t.id==='dayNote'){ S.dayNotes[TODAY]=t.value.trim(); save(); toast('Saved'); return; }
   if(d.tick){ const r=find('plan',d.tick); if(r){ setField('plan',r,'done',t.checked?'Yes':'No'); save(); setTimeout(render,150); } return; }
   if(d.tf){ S.ui.tf[d.tf]=t.value; save(); render(); return; }
   if(t.id==='showDone'){ S.ui.planShowDone=t.checked; save(); render(); return; }
@@ -1071,7 +1222,7 @@ document.addEventListener('change',e=>{
   if(t.id==='fileIn' && t.files[0]){ handleFile(t.files[0]); t.value=''; }
 });
 document.addEventListener('input',e=>{ if(e.target.dataset.tf==='q'){ clearTimeout(window._q); window._q=setTimeout(()=>{ S.ui.tf.q=e.target.value; save(); const pos=e.target.selectionStart; render(); const el=document.querySelector('[data-tf="q"]'); if(el){ el.focus(); el.setSelectionRange(pos,pos);} },250); } });
-document.addEventListener('keydown',e=>{ if(e.key==='Enter' && e.target.id==='noteIn') $('#noteAdd').click(); });
+document.addEventListener('keydown',e=>{ if(e.key!=='Enter') return; if(e.target.id==='noteIn') $('#noteAdd').click(); if(e.target.id==='capText'){ e.preventDefault(); $('#capAdd').click(); } if(e.target.id==='wWhat'||e.target.id==='wWho'){ e.preventDefault(); $('#wAdd').click(); } });
 async function handleFile(file){
   if(/\.json$/i.test(file.name)){ try{ const s=JSON.parse(await file.text()); if(s.v!==1 || !Array.isArray(s.tracker)) throw new Error('not a Control Tower backup');
       confirmDlg('Replace everything in this tool with the backup from '+file.name+'?','Restore backup',()=>{ S={...blank(),...s}; save(true); render(); toast('Backup restored'); }); }catch(e){ say('Could not restore: '+e.message); } return; }
