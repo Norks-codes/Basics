@@ -700,6 +700,19 @@ async function loadTeamById(){
     DB.teamId = id;
     DB.teamName = (entry.name||"") ;
     DB.squad = picks.picks.map(x=>x.element);
+    // Apply transfers made after the picks gameweek to show current squad
+    try{
+      const xfers = baked ? await loadLocal(`transfers-${id}.json`)
+                          : await fetchJSON(`/entry/${id}/transfers/`);
+      if(Array.isArray(xfers)){
+        const pending = xfers.filter(t=>t.event > gw);
+        pending.forEach(t=>{
+          const idx = DB.squad.indexOf(t.element_out);
+          if(idx !== -1) DB.squad[idx] = t.element_in;
+        });
+        if(pending.length) console.log(`Applied ${pending.length} pending transfer(s) after GW${gw}`);
+      }
+    }catch(e){ console.log("No transfers data available:", e.message); }
     DB.bank = (entry.last_deadline_bank!=null ? entry.last_deadline_bank/10 : DB.bank);
     // chips already used
     if(Array.isArray(entry.chips)) entry.chips.forEach(c=>{ DB.chips[c.name]={used:true,gw:c.event}; });

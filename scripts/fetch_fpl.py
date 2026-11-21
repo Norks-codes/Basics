@@ -208,6 +208,14 @@ def main():
     else:
         print("  (no picks available yet — season may not have started)")
 
+    # Fetch transfers so the site can show the current squad after GW transfers
+    try:
+        transfers = get(f"/entry/{ENTRY_ID}/transfers/")
+        write(f"transfers-{ENTRY_ID}.json", transfers)
+        print(f"  {len(transfers)} transfers fetched")
+    except Exception:
+        print("  (could not fetch transfers)")
+
     print(f"Fetching mini-league {LEAGUE_ID}…")
     try:
         league = get(f"/leagues-classic/{LEAGUE_ID}/standings/")
