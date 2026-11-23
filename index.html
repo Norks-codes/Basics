@@ -815,26 +815,62 @@ function renderCorrelation(){
   if(!squad.length){ host.innerHTML=""; return; }
   const n=squad.length, byTeam={};
   squad.forEach(p=>{ (byTeam[p.team]=byTeam[p.team]||[]).push(p); });
-  let hhi=0; Object.values(byTeam).forEach(a=>{ const f=a.length/n; hhi+=f*f; });  // concentration
-  const level = hhi>=0.16 ? "spiky" : hhi>=0.12 ? "balanced" : "steady";
-  const stacks=Object.entries(byTeam).filter(([,a])=>a.length>=3).map(([t,a])=>({t:+t,a}))
-    .sort((x,y)=>y.a.length-x.a.length);
+
+  // Base HHI (team concentration)
+  let hhi=0; Object.values(byTeam).forEach(a=>{ const f=a.length/n; hhi+=f*f; });
+
+  // Identify CS stacks (GK + DEF from same team) and defensive-only stacks
   const csStacks=Object.entries(byTeam).map(([t,a])=>({t:+t,a}))
     .filter(x=>x.a.some(p=>p.element_type===1) && x.a.some(p=>p.element_type===2));
+  const defStacks=Object.entries(byTeam).map(([t,a])=>({t:+t,a,
+    defs:a.filter(p=>p.element_type<=2)})).filter(x=>x.defs.length>=2);
+
+  // Position-adjusted risk: defensive players from the same team are highly
+  // correlated (all depend on clean sheets). Add a penalty per extra CS-linked
+  // player beyond the first, and per additional CS stack.
+  let csPlayers=0, csTeams=0;
+  defStacks.forEach(s=>{ csPlayers+=s.defs.length; csTeams++; });
+  const csPenalty = csPlayers>=5 ? 0.06 : csPlayers>=4 ? 0.04 : csPlayers>=3 ? 0.025 : csPlayers>=2 ? 0.01 : 0;
+  const multiCsPenalty = csTeams>=3 ? 0.03 : csTeams>=2 ? 0.015 : 0;
+  const adjHhi = hhi + csPenalty + multiCsPenalty;
+
+  const level = adjHhi>=0.16 ? "spiky" : adjHhi>=0.12 ? "balanced" : "steady";
+  const stacks=Object.entries(byTeam).filter(([,a])=>a.length>=3).map(([t,a])=>({t:+t,a}))
+    .sort((x,y)=>y.a.length-x.a.length);
+  // Also flag doubles that are all-defensive
+  const defDoubles=defStacks.filter(s=>s.defs.length===s.a.length && s.a.length===2);
   const posture=leaguePosture();
-  const desc={steady:"steady — well spread, low week-to-week swing",
+  const desc={steady:"steady — well spread across teams and positions, low week-to-week swing",
     balanced:"balanced — a normal mix of safety and upside",
-    spiky:"spiky — concentrated, so a big ceiling but a rough team-week hurts"};
+    spiky:"spiky — heavy defensive or team concentration, so a bad team-week hits multiple players"};
   let out=[`<div class="rec ${level==='spiky'?'sell':level==='steady'?'buy':''}"><b>Squad risk: ${level}.</b> ${desc[level]}.</div>`];
-  if(!stacks.length && !csStacks.length)
+
+  // CS exposure summary when significant
+  if(csPlayers>=3){
+    const csNames=defStacks.map(s=>
+      `${teamsById[s.t].short_name} (${s.defs.map(p=>p.web_name).join(" + ")})`).join(", ");
+    out.push(`<div class="rec sell"><b>Clean-sheet exposure: ${csPlayers} players across ${csTeams} team${csTeams>1?"s":""}.</b> ${csNames}. If ${csTeams>1?"either":"that"} team concede${csTeams===1?"s":""}, multiple players lose out together.</div>`);
+  }
+
+  if(!stacks.length && !csStacks.length && !defDoubles.length)
     out.push(`<div class="rec buy"><span class="muted">No heavy stacks — no single club dominates your fate.</span></div>`);
-  stacks.forEach(s=>out.push(`<div class="rec"><b>${teamsById[s.t].short_name} stack (${s.a.length}):</b> ${s.a.map(p=>p.web_name).join(", ")}. Their points move together — great on a big team-week, painful on a blank.</div>`));
-  csStacks.forEach(s=>{
-    const back=s.a.filter(p=>p.element_type<=2).map(p=>p.web_name);
-    if(back.length>=2) out.push(`<div class="rec cap"><b>Clean-sheet stack — ${teamsById[s.t].short_name}:</b> ${back.join(" + ")}. A clean sheet pays them all at once (double upside, double downside).</div>`);
+  stacks.forEach(s=>{
+    const allDef=s.a.every(p=>p.element_type<=2);
+    const note=allDef?" All defensive — extremely correlated via clean sheets.":"";
+    out.push(`<div class="rec ${allDef?'sell':''}"><b>${teamsById[s.t].short_name} stack (${s.a.length}):</b> ${s.a.map(p=>p.web_name).join(", ")}.${note}${allDef?"":" Their points move together — great on a big team-week, painful on a blank."}</div>`);
   });
+  defDoubles.forEach(s=>{
+    if(stacks.some(st=>st.t===s.t)) return;
+    out.push(`<div class="rec cap"><b>${teamsById[s.t].short_name} defensive pair:</b> ${s.defs.map(p=>p.web_name).join(" + ")}. Both need a clean sheet to earn — correlated downside.</div>`);
+  });
+  csStacks.forEach(s=>{
+    if(stacks.some(st=>st.t===s.t)) return;
+    const back=s.a.filter(p=>p.element_type<=2).map(p=>p.web_name);
+    if(back.length>=2) out.push(`<div class="rec cap"><b>CS stack — ${teamsById[s.t].short_name}:</b> ${back.join(" + ")}. A clean sheet pays them all; a goal conceded hurts them all.</div>`);
+  });
+
   if(posture.mode==="protect" && level==="spiky")
-    out.push(`<div class="rec sell"><b>Posture check:</b> you're in <b>Protect</b> mode but the squad is spiky — consider <b>diversifying</b> a stack to steady your floor and keep your lead safe.</div>`);
+    out.push(`<div class="rec sell"><b>Posture check:</b> you're in <b>Protect</b> mode but the squad is spiky — consider <b>diversifying</b> a defensive stack to steady your floor and protect your lead.</div>`);
   else if(posture.mode==="chase" && level==="steady")
     out.push(`<div class="rec buy"><b>Posture check:</b> you're <b>Chasing</b> but the squad is steady — a deliberate <b>stack</b> (a strong side's defence + attacker) would raise your ceiling to make up ground.</div>`);
   else
