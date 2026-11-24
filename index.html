@@ -855,9 +855,16 @@ function renderCorrelation(){
   if(!stacks.length && !csStacks.length && !defDoubles.length)
     out.push(`<div class="rec buy"><span class="muted">No heavy stacks — no single club dominates your fate.</span></div>`);
   stacks.forEach(s=>{
-    const allDef=s.a.every(p=>p.element_type<=2);
-    const note=allDef?" All defensive — extremely correlated via clean sheets.":"";
-    out.push(`<div class="rec ${allDef?'sell':''}"><b>${teamsById[s.t].short_name} stack (${s.a.length}):</b> ${s.a.map(p=>p.web_name).join(", ")}.${note}${allDef?"":" Their points move together — great on a big team-week, painful on a blank."}</div>`);
+    const defs=s.a.filter(p=>p.element_type<=2);
+    const mids=s.a.filter(p=>p.element_type===3);
+    const fwds=s.a.filter(p=>p.element_type===4);
+    const allDef=defs.length===s.a.length;
+    const mostDef=defs.length>=2 && !allDef;
+    let note="";
+    if(allDef) note=` All defensive (${defs.map(p=>p.web_name).join(", ")}) — extremely correlated via clean sheets.`;
+    else if(mostDef) note=` ${defs.length} of ${s.a.length} are defensive (${defs.map(p=>p.web_name).join(", ")}) — heavily correlated via clean sheets.`;
+    const warn=allDef||mostDef;
+    out.push(`<div class="rec ${warn?'sell':''}"><b>${teamsById[s.t].short_name} stack (${s.a.length}):</b> ${s.a.map(p=>p.web_name).join(", ")}.${note}${warn?"":" Their points move together — great on a big team-week, painful on a blank."}</div>`);
   });
   defDoubles.forEach(s=>{
     if(stacks.some(st=>st.t===s.t)) return;
