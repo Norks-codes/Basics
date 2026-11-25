@@ -482,6 +482,27 @@ async function loadCore(){
     (SOLIO.players||[]).forEach((p,i)=>{ p.rank=i+1; if(p.element) solioByEl[p.element]=p; });
   }catch(e){ SOLIO = null; solioByEl = {}; }
   try{ META = await loadLocal("meta.json"); }catch(e){ META = null; }
+  // Auto-refresh squad from baked picks + transfers so the page never shows
+  // a stale squad from localStorage.
+  if(DB.teamId === BAKED_ID){
+    try{
+      const pk = await loadLocal(`picks-${BAKED_ID}.json`);
+      const pkGw = (pk.entry_history && pk.entry_history.event) || 0;
+      DB.squad = pk.picks.map(x=>x.element);
+      try{
+        const xf = await loadLocal(`transfers-${BAKED_ID}.json`);
+        if(Array.isArray(xf)){
+          xf.filter(t=>t.event > pkGw).forEach(t=>{
+            const idx = DB.squad.indexOf(t.element_out);
+            if(idx !== -1) DB.squad[idx] = t.element_in;
+          });
+        }
+      }catch(e){}
+      const ent = await loadLocal(`entry-${BAKED_ID}.json`);
+      if(ent.last_deadline_bank != null) DB.bank = ent.last_deadline_bank/10;
+      save();
+    }catch(e){ console.log("Could not auto-refresh squad:", e.message); }
+  }
   showFreshness();
   globalMsg("Data loaded ✓  Next gameweek: GW"+TARGET_GW, "ok", 4000);
   document.getElementById("gwTitle").textContent = "GW" + TARGET_GW;
